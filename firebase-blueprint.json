@@ -1,0 +1,151 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the Sensei Node Dashboard",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The user's unique identifier"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "The user's display name"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "The user's profile photo URL"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "user"],
+          "description": "The user's role"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the user was created"
+        }
+      },
+      "required": ["uid", "email", "role", "createdAt"]
+    },
+    "ChatSession": {
+      "title": "ChatSession",
+      "description": "A chat session with the AI",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The user who owns the chat"
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the chat"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the chat was created"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the chat was last updated"
+        }
+      },
+      "required": ["uid", "title", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A message within a chat session",
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "description": "The ID of the chat session"
+        },
+        "uid": {
+          "type": "string",
+          "description": "The user who owns the message"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "model"],
+          "description": "The role of the message sender"
+        },
+        "text": {
+          "type": "string",
+          "description": "The text content of the message"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the message was created"
+        }
+      },
+      "required": ["sessionId", "uid", "role", "text", "createdAt"]
+    },
+    "MediaGeneration": {
+      "title": "MediaGeneration",
+      "description": "A generated image or video",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The user who generated the media"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["image", "video"],
+          "description": "The type of media generated"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "The prompt used to generate the media"
+        },
+        "url": {
+          "type": "string",
+          "description": "The URL of the generated media"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the media was generated"
+        }
+      },
+      "required": ["uid", "type", "prompt", "url", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "User profiles"
+    },
+    "/chats/{chatId}": {
+      "schema": {
+        "$ref": "#/entities/ChatSession"
+      },
+      "description": "Chat sessions"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/ChatMessage"
+      },
+      "description": "Messages within a chat session"
+    },
+    "/generations/{generationId}": {
+      "schema": {
+        "$ref": "#/entities/MediaGeneration"
+      },
+      "description": "Generated media history"
+    }
+  }
+}
