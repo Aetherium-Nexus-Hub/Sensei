@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
-import { Send, Image as ImageIcon, Video, Map, Search, Brain, Zap, Loader2 } from 'lucide-react';
+import { Send, Image as ImageIcon, Video, Map, Search, Brain, Zap, Loader2, X, Trash2 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { auth, db } from '../firebase';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -32,6 +33,8 @@ export default function Chatbot() {
       });
       setMessages(msgs);
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `chats/${auth.currentUser?.uid}/messages`);
     });
     return () => unsubscribe();
   }, [auth.currentUser]);
@@ -39,6 +42,21 @@ export default function Chatbot() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
+    }
+  };
+
+  const clearChat = async () => {
+    if (!auth.currentUser) return;
+    
+    try {
+      const q = query(collection(db, 'chats', auth.currentUser.uid, 'messages'));
+      const snapshot = await getDocs(q);
+      const deletePromises = snapshot.docs.map(document => 
+        deleteDoc(doc(db, 'chats', auth.currentUser!.uid, 'messages', document.id))
+      );
+      await Promise.all(deletePromises);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `chats/${auth.currentUser?.uid}/messages`);
     }
   };
 
@@ -60,6 +78,8 @@ export default function Chatbot() {
         role: 'user',
         text: userText + (currentFile ? ` [Attached: ${currentFile.name}]` : ''),
         createdAt: new Date().toISOString()
+      }).catch(error => {
+        handleFirestoreError(error, OperationType.CREATE, `chats/${auth.currentUser?.uid}/messages`);
       });
 
       let modelName = 'gemini-3.1-pro-preview';
@@ -126,16 +146,20 @@ export default function Chatbot() {
         role: 'model',
         text: responseText,
         createdAt: new Date().toISOString()
+      }).catch(error => {
+        handleFirestoreError(error, OperationType.CREATE, `chats/${auth.currentUser?.uid}/messages`);
       });
 
     } catch (error) {
       console.error("Error generating content:", error);
-      await addDoc(collection(db, 'chats', auth.currentUser.uid, 'messages'), {
+      await addDoc(collection(db, 'chats', auth.currentUser!.uid, 'messages'), {
         sessionId: 'default',
-        uid: auth.currentUser.uid,
+        uid: auth.currentUser!.uid,
         role: 'model',
         text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         createdAt: new Date().toISOString()
+      }).catch(e => {
+        handleFirestoreError(e, OperationType.CREATE, `chats/${auth.currentUser?.uid}/messages`);
       });
     } finally {
       setLoading(false);
@@ -145,21 +169,26 @@ export default function Chatbot() {
   return (
     <div className="flex flex-col h-[calc(100vh-12rem)] cp-border bg-cp-darker/80">
       {/* Mode Selector */}
-      <div className="flex flex-wrap gap-2 p-4 border-b border-cp-cyan/30 bg-black/40">
-        <button onClick={() => setMode('pro')} className={`px-3 py-1 text-xs font-bold uppercase flex items-center gap-1 ${mode === 'pro' ? 'bg-cp-cyan text-black' : 'text-cp-cyan border border-cp-cyan'}`}>
-          <Brain className="w-4 h-4" /> Pro
-        </button>
-        <button onClick={() => setMode('flash-lite')} className={`px-3 py-1 text-xs font-bold uppercase flex items-center gap-1 ${mode === 'flash-lite' ? 'bg-cp-cyan text-black' : 'text-cp-cyan border border-cp-cyan'}`}>
-          <Zap className="w-4 h-4" /> Flash Lite
-        </button>
-        <button onClick={() => setMode('thinking')} className={`px-3 py-1 text-xs font-bold uppercase flex items-center gap-1 ${mode === 'thinking' ? 'bg-cp-cyan text-black' : 'text-cp-cyan border border-cp-cyan'}`}>
-          <Brain className="w-4 h-4" /> Thinking
-        </button>
-        <button onClick={() => setMode('search')} className={`px-3 py-1 text-xs font-bold uppercase flex items-center gap-1 ${mode === 'search' ? 'bg-cp-cyan text-black' : 'text-cp-cyan border border-cp-cyan'}`}>
-          <Search className="w-4 h-4" /> Search
-        </button>
-        <button onClick={() => setMode('maps')} className={`px-3 py-1 text-xs font-bold uppercase flex items-center gap-1 ${mode === 'maps' ? 'bg-cp-cyan text-black' : 'text-cp-cyan border border-cp-cyan'}`}>
-          <Map className="w-4 h-4" /> Maps
+      <div className="flex flex-wrap items-center justify-between p-4 border-b border-cp-cyan/30 bg-black/40">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setMode('pro')} className={`px-3 py-1 text-xs font-bold uppercase flex items-center gap-1 ${mode === 'pro' ? 'bg-cp-cyan text-black' : 'text-cp-cyan border border-cp-cyan'}`}>
+            <Brain className="w-4 h-4" /> Pro
+          </button>
+          <button onClick={() => setMode('flash-lite')} className={`px-3 py-1 text-xs font-bold uppercase flex items-center gap-1 ${mode === 'flash-lite' ? 'bg-cp-cyan text-black' : 'text-cp-cyan border border-cp-cyan'}`}>
+            <Zap className="w-4 h-4" /> Flash Lite
+          </button>
+          <button onClick={() => setMode('thinking')} className={`px-3 py-1 text-xs font-bold uppercase flex items-center gap-1 ${mode === 'thinking' ? 'bg-cp-cyan text-black' : 'text-cp-cyan border border-cp-cyan'}`}>
+            <Brain className="w-4 h-4" /> Thinking
+          </button>
+          <button onClick={() => setMode('search')} className={`px-3 py-1 text-xs font-bold uppercase flex items-center gap-1 ${mode === 'search' ? 'bg-cp-cyan text-black' : 'text-cp-cyan border border-cp-cyan'}`}>
+            <Search className="w-4 h-4" /> Search
+          </button>
+          <button onClick={() => setMode('maps')} className={`px-3 py-1 text-xs font-bold uppercase flex items-center gap-1 ${mode === 'maps' ? 'bg-cp-cyan text-black' : 'text-cp-cyan border border-cp-cyan'}`}>
+            <Map className="w-4 h-4" /> Maps
+          </button>
+        </div>
+        <button onClick={clearChat} className="px-3 py-1 text-xs font-bold uppercase flex items-center gap-1 text-cp-red border border-cp-red hover:bg-cp-red/20 transition-colors ml-auto mt-2 sm:mt-0">
+          <Trash2 className="w-4 h-4" /> Purge
         </button>
       </div>
 
@@ -198,8 +227,11 @@ export default function Chatbot() {
         
         <div className="flex-1 relative">
           {file && (
-            <div className="absolute -top-8 left-0 text-xs text-cp-yellow bg-black px-2 py-1 border border-cp-yellow">
-              Attached: {file.name}
+            <div className="absolute -top-10 left-0 text-xs text-cp-yellow bg-black px-2 py-1 border border-cp-yellow flex items-center gap-2">
+              <span>Attached: {file.name}</span>
+              <button onClick={() => setFile(null)} className="text-cp-red hover:text-white transition-colors">
+                <X className="w-3 h-3" />
+              </button>
             </div>
           )}
           <input 

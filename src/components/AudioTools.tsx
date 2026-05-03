@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { Mic, Volume2, Loader2, Play, Square, FileText } from 'lucide-react';
+import { Mic, Volume2, Loader2, Play, Square, FileText, Activity } from 'lucide-react';
+import { motion } from 'motion/react';
 import { auth } from '../firebase';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
@@ -18,12 +19,18 @@ export default function AudioTools() {
   const audioChunksRef = useRef<Blob[]>([]);
   const liveSessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const playbackContextRef = useRef<AudioContext | null>(null);
+  const nextPlayTimeRef = useRef<number>(0);
+  const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const liveStreamRef = useRef<MediaStream | null>(null);
 
   // Cleanup
   useEffect(() => {
     return () => {
       if (liveSessionRef.current) liveSessionRef.current.close();
       if (audioContextRef.current) audioContextRef.current.close();
+      if (playbackContextRef.current) playbackContextRef.current.close();
+      if (liveStreamRef.current) liveStreamRef.current.getTracks().forEach(t => t.stop());
     };
   }, []);
 
@@ -126,13 +133,33 @@ export default function AudioTools() {
         liveSessionRef.current.close();
         liveSessionRef.current = null;
       }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+      if (liveStreamRef.current) {
+        liveStreamRef.current.getTracks().forEach(t => t.stop());
+        liveStreamRef.current = null;
+      }
       setIsLiveConnected(false);
+      activeSourcesRef.current.forEach(source => {
+        try { source.stop(); } catch (e) {}
+      });
+      activeSourcesRef.current = [];
       return;
     }
 
     try {
       setIsLiveConnected(true);
       setTranscription("Connecting to Live API...");
+      
+      // Initialize playback context
+      if (!playbackContextRef.current) {
+        playbackContextRef.current = new AudioContext({ sampleRate: 24000 });
+      } else if (playbackContextRef.current.state === 'suspended') {
+        playbackContextRef.current.resume();
+      }
+      nextPlayTimeRef.current = playbackContextRef.current.currentTime;
       
       const sessionPromise = ai.live.connect({
         model: "gemini-2.5-flash-native-audio-preview-12-2025",
@@ -141,7 +168,47 @@ export default function AudioTools() {
           onmessage: (msg: LiveServerMessage) => {
             const base64Audio = msg.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (base64Audio) {
-               // In a real app we'd play this.
+               const binaryString = atob(base64Audio);
+               const len = binaryString.length;
+               const bytes = new Uint8Array(len);
+               for (let i = 0; i < len; i++) {
+                 bytes[i] = binaryString.charCodeAt(i);
+               }
+               const int16Array = new Int16Array(bytes.buffer);
+               const float32Array = new Float32Array(int16Array.length);
+               for (let i = 0; i < int16Array.length; i++) {
+                 float32Array[i] = int16Array[i] / 32768.0;
+               }
+
+               if (playbackContextRef.current) {
+                 const audioBuffer = playbackContextRef.current.createBuffer(1, float32Array.length, 24000);
+                 audioBuffer.getChannelData(0).set(float32Array);
+                 const source = playbackContextRef.current.createBufferSource();
+                 source.buffer = audioBuffer;
+                 source.connect(playbackContextRef.current.destination);
+                 
+                 const currentTime = playbackContextRef.current.currentTime;
+                 if (nextPlayTimeRef.current < currentTime) {
+                   nextPlayTimeRef.current = currentTime;
+                 }
+                 source.start(nextPlayTimeRef.current);
+                 nextPlayTimeRef.current += audioBuffer.duration;
+                 
+                 source.onended = () => {
+                   activeSourcesRef.current = activeSourcesRef.current.filter(s => s !== source);
+                 };
+                 activeSourcesRef.current.push(source);
+               }
+            }
+            
+            if (msg.serverContent?.interrupted) {
+               activeSourcesRef.current.forEach(source => {
+                 try { source.stop(); } catch (e) {}
+               });
+               activeSourcesRef.current = [];
+               if (playbackContextRef.current) {
+                 nextPlayTimeRef.current = playbackContextRef.current.currentTime;
+               }
             }
           },
           onclose: () => console.log("Live API closed"),
@@ -156,8 +223,13 @@ export default function AudioTools() {
         },
       });
 
+      sessionPromise.then(session => {
+        liveSessionRef.current = session;
+      });
+
       // We need to capture audio and send it
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      liveStreamRef.current = stream;
       audioContextRef.current = new AudioContext({ sampleRate: 16000 });
       const source = audioContextRef.current.createMediaStreamSource(stream);
       const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
@@ -166,7 +238,7 @@ export default function AudioTools() {
       processor.connect(audioContextRef.current.destination);
 
       processor.onaudioprocess = (e) => {
-        if (!isLiveConnected) return;
+        if (!liveSessionRef.current) return;
         const inputData = e.inputBuffer.getChannelData(0);
         // Convert Float32Array to Int16Array
         const pcm16 = new Int16Array(inputData.length);
@@ -228,6 +300,17 @@ export default function AudioTools() {
             </div>
           </div>
 
+          {mode === 'live' && (
+            <div className="bg-cp-cyan/10 border border-cp-cyan p-4 font-mono text-sm text-cp-cyan">
+              <p className="mb-2"><strong className="text-white">Live Comms Protocol:</strong> Establishes a low-latency, real-time audio link with the Sensei Node.</p>
+              <ul className="list-disc pl-5 space-y-1 text-gray-300">
+                <li>Requires microphone access.</li>
+                <li>Speak naturally after the connection is established.</li>
+                <li>The AI will respond via audio.</li>
+              </ul>
+            </div>
+          )}
+
           {mode === 'tts' && (
             <div className="space-y-4">
               <textarea 
@@ -264,14 +347,35 @@ export default function AudioTools() {
 
           {mode === 'live' && (
             <div className="space-y-4">
-              <div className="bg-black/50 border border-cp-cyan/30 p-6 text-center">
+              <div className="bg-black/50 border border-cp-cyan/30 p-6 text-center relative overflow-hidden">
+                {isLiveConnected && (
+                  <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
+                    <div className="flex gap-1 items-center h-full">
+                      {[...Array(12)].map((_, i) => (
+                        <motion.div
+                          key={i}
+                          className="w-2 bg-cp-cyan"
+                          animate={{
+                            height: ["10%", "80%", "30%", "100%", "20%"],
+                          }}
+                          transition={{
+                            duration: 1.5,
+                            repeat: Infinity,
+                            repeatType: "mirror",
+                            delay: i * 0.1,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <button 
                   onClick={toggleLiveSession}
-                  className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto transition-all ${isLiveConnected ? 'bg-cp-red animate-pulse' : 'bg-cp-cyan hover:bg-cp-yellow'}`}
+                  className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto transition-all relative z-10 ${isLiveConnected ? 'bg-cp-red animate-pulse shadow-[0_0_30px_rgba(255,0,60,0.5)]' : 'bg-cp-cyan hover:bg-cp-yellow'}`}
                 >
                   {isLiveConnected ? <Square className="w-10 h-10 text-white" /> : <Volume2 className="w-10 h-10 text-black" />}
                 </button>
-                <p className="mt-4 font-mono text-sm text-gray-400 uppercase">
+                <p className="mt-4 font-mono text-sm text-gray-400 uppercase relative z-10">
                   {isLiveConnected ? 'Live Session Active - Speak Now' : 'Initialize Live Comms'}
                 </p>
               </div>

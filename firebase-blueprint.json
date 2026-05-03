@@ -120,6 +120,32 @@
         }
       },
       "required": ["uid", "type", "prompt", "url", "createdAt"]
+    },
+    "Telemetry": {
+      "title": "Telemetry",
+      "description": "Real-time game state telemetry",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The user associated with the telemetry"
+        },
+        "activeQuest": {
+          "type": "string",
+          "description": "The current active quest/directive"
+        },
+        "district": {
+          "type": "string"
+        },
+        "healthPercent": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "activeQuest", "updatedAt"]
     }
   },
   "firestore": {
@@ -146,6 +172,12 @@
         "$ref": "#/entities/MediaGeneration"
       },
       "description": "Generated media history"
+    },
+    "/telemetry/{telemetryId}": {
+      "schema": {
+        "$ref": "#/entities/Telemetry"
+      },
+      "description": "Active telemetry streams"
     }
   }
 }

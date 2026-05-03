@@ -83,6 +83,17 @@ service cloud.firestore {
              data.createdAt is string;
     }
 
+    function isValidTelemetry(data) {
+      return hasOnlyAllowedFields(['uid', 'activeQuest', 'district', 'healthPercent', 'updatedAt', 'storkStatus', 'constableStatus']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
+             data.activeQuest is string && data.activeQuest.size() <= 500 &&
+             (!('district' in data) || (data.district is string && data.district.size() <= 200)) &&
+             (!('healthPercent' in data) || (data.healthPercent is number && data.healthPercent >= 0 && data.healthPercent <= 100)) &&
+             data.updatedAt is string &&
+             (!('storkStatus' in data) || (data.storkStatus is string)) &&
+             (!('constableStatus' in data) || (data.constableStatus is string));
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -113,6 +124,12 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidMediaGeneration(request.resource.data) && uidUnchanged();
       allow update: if false; // Generations history is immutable
       allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /telemetry/{telemetryId} {
+      allow read: if isOwner(telemetryId) || isAdmin();
+      allow create, update: if isAuthenticated() && isOwner(telemetryId) && isValidTelemetry(request.resource.data) && request.resource.data.uid == request.auth.uid;
+      allow delete: if isOwner(telemetryId) || isAdmin();
     }
   }
 }
