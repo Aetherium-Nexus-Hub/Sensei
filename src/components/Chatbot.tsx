@@ -15,7 +15,11 @@ interface Message {
   createdAt: any;
 }
 
-export default function Chatbot() {
+interface ChatbotProps {
+  activeProfile?: 'cb77' | 'ac';
+}
+
+export default function Chatbot({ activeProfile = 'cb77' }: ChatbotProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -117,10 +121,18 @@ export default function Chatbot() {
         });
       }
 
+      const isAc = activeProfile === 'ac';
+      const systemInstruction = isAc 
+        ? "You are the Animus companion assistant. Adopt a highly immersive historical and analytical tone, referencing genetic memory sequences, historical guilds of assassins, the eternal struggle with templars, and synchronization. The user's memory sequence is currently anchored in Florence and Masyaf. Your name is 'Animus v4.2'."
+        : "You are the SENSEI Neural-Link AI, a tactical sub-system proxy connected to NetWatch regional infrastructure. Maintain an elite cyberpunk tone: high-tech, slightly cynical, referencing district security feeds, regional net runners, and tactical sub-systems. Your name is 'SENSEI Node Host'.";
+
       const response = await ai.models.generateContent({
         model: modelName,
         contents: { parts },
-        config
+        config: {
+          systemInstruction,
+          ...config
+        }
       });
 
       let responseText = response.text || '';

@@ -1,14 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700;900&family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 
-@theme {
-  --font-sans: "Rajdhani", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Orbitron", ui-sans-serif, system-ui, sans-serif;
+:root {
+  --font-sans-var: "Rajdhani", ui-sans-serif, system-ui, sans-serif;
+  --font-display-var: "Orbitron", ui-sans-serif, system-ui, sans-serif;
+  --font-mono-var: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   
-  --color-cp-yellow: #FCEE0A;
-  --color-cp-cyan: #00F0FF;
-  --color-cp-red: #FF003C;
-  --color-cp-dark: #0D0D0D;
-  --color-cp-darker: #050505;
+  --cp-yellow: #FCEE0A;
+  --cp-cyan: #00F0FF;
+  --cp-red: #FF003C;
+  --cp-dark: #0D0D0D;
+  --cp-darker: #050505;
+}
+
+.theme-ac {
+  --font-sans-var: "Cinzel", serif;
+  --font-display-var: "Cinzel", serif;
+  --font-mono-var: "Space Mono", monospace;
+  
+  --cp-yellow: #D4AF37; /* AC Gold */
+  --cp-cyan: #4DD0E1; /* Animus teal/blue */
+  --cp-red: #C62828; /* AC Crimson red */
+  --cp-dark: #1F1C1B; /* Dark stone */
+  --cp-darker: #0D0B0A; /* Deep dark ash */
+}
+
+@theme {
+  --font-sans: var(--font-sans-var);
+  --font-display: var(--font-display-var);
+  --font-mono: var(--font-mono-var);
+  
+  --color-cp-yellow: var(--cp-yellow);
+  --color-cp-cyan: var(--cp-cyan);
+  --color-cp-red: var(--cp-red);
+  --color-cp-dark: var(--cp-dark);
+  --color-cp-darker: var(--cp-darker);
 }
 
 body {
