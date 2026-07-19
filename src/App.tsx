@@ -9,6 +9,7 @@ import AudioTools from './components/AudioTools';
 import Dashboard from './components/Dashboard';
 import HorizonTerminal from './components/HorizonTerminal';
 import UiLayers, { UiLayersOverlay, UiLayersState } from './components/UiLayers';
+import { TimeRangeProvider } from './contexts/TimeRangeContext';
 
 interface GameState {
   district: string;
@@ -332,210 +333,212 @@ export default function App() {
           className={`min-h-screen relative p-4 md:p-8 flex flex-col transition-colors duration-500 ${activeProfile === 'ac' ? 'theme-ac' : 'theme-cb77'}`}
         >
 
-      {/* Visual Alarm Overlay */}
-      <AnimatePresence>
-        {isAlertTriggered && (
-          <>
-            {/* Blinking red border/vignette */}
-            {alertVisual === 'vignette' && (
-              <motion.div
-                key="alert-vignette"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: [0.3, 0.8, 0.3] }}
-                exit={{ opacity: 0 }}
-                transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
-                className="fixed inset-0 border-[6px] md:border-[12px] border-cp-red pointer-events-none z-50 shadow-[inset_0_0_80px_rgba(255,0,60,0.5)]"
-              />
-            )}
+        {/* Visual Alarm Overlay */}
+        <AnimatePresence>
+          {isAlertTriggered && (
+            <>
+              {/* Blinking red border/vignette */}
+              {alertVisual === 'vignette' && (
+                <motion.div
+                  key="alert-vignette"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0.3, 0.8, 0.3] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+                  className="fixed inset-0 border-[6px] md:border-[12px] border-cp-red pointer-events-none z-50 shadow-[inset_0_0_80px_rgba(255,0,60,0.5)]"
+                />
+              )}
 
-            {/* Intense strobe pattern */}
-            {alertVisual === 'strobe' && (
-              <motion.div
-                key="alert-strobe"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: [0.1, 0.4, 0.1] }}
-                exit={{ opacity: 0 }}
-                transition={{ repeat: Infinity, duration: 0.6, ease: "linear" }}
-                className="fixed inset-0 bg-cp-red/10 pointer-events-none z-50 mix-blend-color-burn"
-              />
-            )}
+              {/* Intense strobe pattern */}
+              {alertVisual === 'strobe' && (
+                <motion.div
+                  key="alert-strobe"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0.1, 0.4, 0.1] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ repeat: Infinity, duration: 0.6, ease: "linear" }}
+                  className="fixed inset-0 bg-cp-red/10 pointer-events-none z-50 mix-blend-color-burn"
+                />
+              )}
 
-            {/* Theme-adapted emergency info widget overlay */}
-            <motion.div
-              key="alert-banner"
-              initial={{ y: -50, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: -50, opacity: 0 }}
-              className="fixed top-2 left-1/2 -translate-x-1/2 z-50 bg-black/95 border-2 border-cp-red shadow-[0_0_15px_rgba(255,0,60,0.5)] px-4 py-2 font-mono text-center pointer-events-auto"
-            >
-              <div className="flex items-center gap-3">
-                <ShieldAlert className="w-5 h-5 text-cp-red animate-bounce shrink-0" />
-                <div className="text-left select-none">
-                  <div className="text-xs font-black text-cp-red uppercase tracking-wider animate-pulse font-display">
-                    {activeProfile === 'ac' ? 'WARNING: ANIMUS DESYNCHRONIZATION DEVIATION' : 'CRITICAL WARNING: SYSTEM FAILURE IMMINENT'}
+              {/* Theme-adapted emergency info widget overlay */}
+              <motion.div
+                key="alert-banner"
+                initial={{ y: -50, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -50, opacity: 0 }}
+                className="fixed top-2 left-1/2 -translate-x-1/2 z-50 bg-black/95 border-2 border-cp-red shadow-[0_0_15px_rgba(255,0,60,0.5)] px-4 py-2 font-mono text-center pointer-events-auto"
+              >
+                <div className="flex items-center gap-3">
+                  <ShieldAlert className="w-5 h-5 text-cp-red animate-bounce shrink-0" />
+                  <div className="text-left select-none">
+                    <div className="text-xs font-black text-cp-red uppercase tracking-wider animate-pulse font-display">
+                      {activeProfile === 'ac' ? 'WARNING: ANIMUS DESYNCHRONIZATION DEVIATION' : 'CRITICAL WARNING: SYSTEM FAILURE IMMINENT'}
+                    </div>
+                    <div className="text-[10px] text-white">
+                      {activeProfile === 'ac' ? 'SYNAPSE ALIGNMENT LEVEL:' : 'CORE ROSTER STABILITY BELOW THRESHOLD:'} <span className="text-cp-red font-bold">{gameState?.health_percent}%</span>
+                    </div>
                   </div>
-                  <div className="text-[10px] text-white">
-                    {activeProfile === 'ac' ? 'SYNAPSE ALIGNMENT LEVEL:' : 'CORE ROSTER STABILITY BELOW THRESHOLD:'} <span className="text-cp-red font-bold">{gameState?.health_percent}%</span> (LIMIT: {alertThreshold}%)
-                  </div>
+                  {/* Silence/Mute button for quick UX peace */}
+                  <button 
+                    onClick={() => setAlertEnabled(false)}
+                    className="bg-cp-red hover:bg-white text-white hover:text-black text-[9px] uppercase px-2 py-1 font-bold ml-3 transition-colors cursor-pointer"
+                  >
+                    Silence
+                  </button>
                 </div>
-                {/* Silence/Mute button for quick UX peace */}
-                <button 
-                  onClick={() => setAlertEnabled(false)}
-                  className="bg-cp-red hover:bg-white text-white hover:text-black text-[9px] uppercase px-2 py-1 font-bold ml-3 transition-colors cursor-pointer"
-                >
-                  Silence
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-      
-      {/* Header */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8 border-b border-cp-cyan/30 pb-4 relative">
-        <div className="absolute -top-4 -left-4 w-12 h-12 border-t-2 border-l-2 border-cp-cyan/20" />
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-1.5 h-1.5 bg-cp-cyan rounded-full animate-pulse" />
-            <span className="text-[10px] font-mono text-cp-cyan uppercase tracking-[0.3em]">
-              {activeProfile === 'ac' ? 'Animus Memory Stream Stabilized' : 'Aetherium Node Synchronized'}
-            </span>
-          </div>
-          <h1 className="text-4xl md:text-5xl font-display font-black tracking-tighter text-cp-yellow glitch-text uppercase" data-text={activeProfile === 'ac' ? "ANIMUS // SYNAPSE" : "SENSEI // OVERWATCH"}>
-            {activeProfile === 'ac' ? "ANIMUS // SYNAPSE" : "SENSEI // OVERWATCH"}
-          </h1>
-          <p className="text-cp-cyan font-mono text-xs tracking-[0.4em] mt-1 opacity-70">
-            {activeProfile === 'ac' ? 'ABSTERGO MEMORY RECONSTRUCTION CORE' : 'REGIONAL SUPERVISOR // NODE: SENSEI-2026-ALPHA'}
-          </p>
-        </div>
-        <div className="w-full md:w-auto flex flex-col items-end gap-2">
-          {/* Profile Switcher Layer */}
-          <div className="flex items-center gap-1 bg-black/60 p-1 border border-cp-cyan/20 rounded mb-2">
-            <span className="text-[8px] font-mono text-gray-500 uppercase px-1.5">Layer:</span>
-            <button
-              onClick={() => handleProfileSwitch('cb77')}
-              className={`px-2.5 py-0.5 text-[9px] font-bold uppercase transition-all duration-300 ${activeProfile === 'cb77' ? 'bg-cp-cyan text-black' : 'text-cp-cyan hover:bg-cp-cyan/15'}`}
-            >
-              CB77 NIGHT
-            </button>
-            <button
-              onClick={() => handleProfileSwitch('ac')}
-              className={`px-2.5 py-0.5 text-[9px] font-bold uppercase transition-all duration-300 ${activeProfile === 'ac' ? 'bg-cp-yellow text-black' : 'text-cp-yellow hover:bg-cp-yellow/15'}`}
-            >
-              AC ANIMUS
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 justify-end text-[10px] font-mono text-gray-500 uppercase">
-            <div className="flex items-center gap-1.5">
-              <span>{activeProfile === 'ac' ? 'Animus Link:' : 'ZA-Gateway:'}</span>
-              <span className="text-cp-cyan font-bold">Connected</span>
-            </div>
-            <div className="hidden sm:inline text-gray-700">|</div>
-            <div className="flex items-center gap-1.5">
-              <span>Sync State:</span>
-              <span className={`font-bold transition-all duration-300 ${isSyncFlashing ? 'text-white font-black' : lastHeartbeat ? 'text-cp-yellow' : 'text-cp-red animate-pulse'}`}>
-                {relativeSyncTime}
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+        
+        {/* Header */}
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8 border-b border-cp-cyan/30 pb-4 relative">
+          <div className="absolute -top-4 -left-4 w-12 h-12 border-t-2 border-l-2 border-cp-cyan/20" />
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-1.5 h-1.5 bg-cp-cyan rounded-full animate-pulse" />
+              <span className="text-[10px] font-mono text-cp-cyan uppercase tracking-[0.3em]">
+                {activeProfile === 'ac' ? 'Animus Memory Stream Stabilized' : 'Aetherium Node Synchronized'}
               </span>
-              <RefreshCw className={`w-3.5 h-3.5 text-cp-yellow/80 transition-transform duration-500 ${isSyncFlashing ? 'animate-spin text-white' : ''}`} />
             </div>
+            <h1 className="text-4xl md:text-5xl font-display font-black tracking-tighter text-cp-yellow glitch-text uppercase" data-text={activeProfile === 'ac' ? "ANIMUS // SYNAPSE" : "SENSEI // OVERWATCH"}>
+              {activeProfile === 'ac' ? "ANIMUS // SYNAPSE" : "SENSEI // OVERWATCH"}
+            </h1>
+            <p className="text-cp-cyan font-mono text-xs tracking-[0.4em] mt-1 opacity-70">
+              {activeProfile === 'ac' ? 'ABSTERGO MEMORY RECONSTRUCTION CORE' : 'REGIONAL SUPERVISOR // NODE: SENSEI-2026-ALPHA'}
+            </p>
           </div>
-          <AuthButton />
-        </div>
-      </header>
-
-      {/* Navigation Tabs */}
-      <nav className="flex gap-4 mb-6 border-b border-cp-cyan/30 pb-2 overflow-x-auto">
-        <button 
-          onClick={() => setActiveTab('dashboard')}
-          className={`px-4 py-2 font-display font-bold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'dashboard' ? 'text-cp-yellow border-b-2 border-cp-yellow' : 'text-cp-cyan hover:text-white'}`}
-        >
-          <Activity className="w-5 h-5" /> Telemetry
-        </button>
-        <button 
-          onClick={() => setActiveTab('story')}
-          className={`px-4 py-2 font-display font-bold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'story' ? 'text-cp-yellow border-b-2 border-cp-yellow' : 'text-cp-cyan hover:text-white'}`}
-        >
-          <Compass className="w-5 h-5" /> Story Matrix
-        </button>
-        <button 
-          onClick={() => setActiveTab('chat')}
-          className={`px-4 py-2 font-display font-bold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'chat' ? 'text-cp-yellow border-b-2 border-cp-yellow' : 'text-cp-cyan hover:text-white'}`}
-        >
-          <MessageSquare className="w-5 h-5" /> Neural Link
-        </button>
-        <button 
-          onClick={() => setActiveTab('media')}
-          className={`px-4 py-2 font-display font-bold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'media' ? 'text-cp-yellow border-b-2 border-cp-yellow' : 'text-cp-cyan hover:text-white'}`}
-        >
-          <ImageIcon className="w-5 h-5" /> Media Forge
-        </button>
-        <button 
-          onClick={() => setActiveTab('audio')}
-          className={`px-4 py-2 font-display font-bold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'audio' ? 'text-cp-yellow border-b-2 border-cp-yellow' : 'text-cp-cyan hover:text-white'}`}
-        >
-          <Mic className="w-5 h-5" /> Comms Hub
-        </button>
-      </nav>
-
-      {/* Main Content Area */}
-      {activeTab === 'dashboard' && (
-        !gameState ? (
-          <div className="flex-grow flex items-center justify-center text-cp-cyan font-display">
-            <div className="text-center">
-              <Zap className="w-16 h-16 mx-auto mb-4 animate-pulse" />
-              <h1 className="text-3xl tracking-widest uppercase glitch-text" data-text={activeProfile === 'ac' ? "INITIALIZING ANIMUS SYNAPSE CORE" : "INITIALIZING SENSEI MRC-OVERWATCH"}>
-                {activeProfile === 'ac' ? "INITIALIZING ANIMUS SYNAPSE CORE" : "INITIALIZING SENSEI MRC-OVERWATCH"}
-              </h1>
-              <p className="mt-2 text-cp-yellow opacity-70">
-                {activeProfile === 'ac' ? "Calibrating Genetic Memetic Array..." : "Awaiting Regional Supervisor Handshake..."}
-              </p>
+          <div className="w-full md:w-auto flex flex-col items-end gap-2">
+            {/* Profile Switcher Layer */}
+            <div className="flex items-center gap-1 bg-black/60 p-1 border border-cp-cyan/20 rounded mb-2">
+              <span className="text-[8px] font-mono text-gray-500 uppercase px-1.5">Layer:</span>
+              <button
+                onClick={() => handleProfileSwitch('cb77')}
+                className={`px-2.5 py-0.5 text-[9px] font-bold uppercase transition-all duration-300 ${activeProfile === 'cb77' ? 'bg-cp-cyan text-black' : 'text-cp-cyan hover:bg-cp-cyan/15'}`}
+              >
+                CB77 NIGHT
+              </button>
+              <button
+                onClick={() => handleProfileSwitch('ac')}
+                className={`px-2.5 py-0.5 text-[9px] font-bold uppercase transition-all duration-300 ${activeProfile === 'ac' ? 'bg-cp-yellow text-black' : 'text-cp-yellow hover:bg-cp-yellow/15'}`}
+              >
+                AC ANIMUS
+              </button>
             </div>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 justify-end text-[10px] font-mono text-gray-500 uppercase">
+              <div className="flex items-center gap-1.5">
+                <span>{activeProfile === 'ac' ? 'Animus Link:' : 'ZA-Gateway:'}</span>
+                <span className="text-cp-cyan font-bold">Connected</span>
+              </div>
+              <div className="hidden sm:inline text-gray-700">|</div>
+              <div className="flex items-center gap-1.5">
+                <span>Sync State:</span>
+                <span className={`font-bold transition-all duration-300 ${isSyncFlashing ? 'text-white font-black' : lastHeartbeat ? 'text-cp-yellow' : 'text-cp-red animate-pulse'}`}>
+                  {relativeSyncTime}
+                </span>
+                <RefreshCw className={`w-3.5 h-3.5 text-cp-yellow/80 transition-transform duration-500 ${isSyncFlashing ? 'animate-spin text-white' : ''}`} />
+              </div>
+            </div>
+            <AuthButton />
           </div>
-        ) : (
-          <Dashboard 
-            gameState={gameState} 
-            logs={logs} 
-            addLog={addLog}
-            triggerMockUpdate={triggerMockUpdate} 
-            alertThreshold={alertThreshold}
-            setAlertThreshold={setAlertThreshold}
-            alertEnabled={alertEnabled}
-            setAlertEnabled={setAlertEnabled}
-            alertVisual={alertVisual}
-            setAlertVisual={setAlertVisual}
-            alertSound={alertSound}
-            setAlertSound={setAlertSound}
-            activeProfile={activeProfile}
-          />
-        )
-      )}
+        </header>
 
-      {activeTab === 'story' && (
-        <HorizonTerminal />
-      )}
+        {/* Navigation Tabs */}
+        <nav className="flex gap-4 mb-6 border-b border-cp-cyan/30 pb-2 overflow-x-auto">
+          <button 
+            onClick={() => setActiveTab('dashboard')}
+            className={`px-4 py-2 font-display font-bold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'dashboard' ? 'text-cp-yellow border-b-2 border-cp-yellow' : 'text-gray-400 hover:text-white'}`}
+          >
+            <Activity className="w-5 h-5" /> Telemetry
+          </button>
+          <button 
+            onClick={() => setActiveTab('story')}
+            className={`px-4 py-2 font-display font-bold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'story' ? 'text-cp-yellow border-b-2 border-cp-yellow' : 'text-gray-400 hover:text-white'}`}
+          >
+            <Compass className="w-5 h-5" /> Story Matrix
+          </button>
+          <button 
+            onClick={() => setActiveTab('chat')}
+            className={`px-4 py-2 font-display font-bold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'chat' ? 'text-cp-yellow border-b-2 border-cp-yellow' : 'text-gray-400 hover:text-white'}`}
+          >
+            <MessageSquare className="w-5 h-5" /> Neural Link
+          </button>
+          <button 
+            onClick={() => setActiveTab('media')}
+            className={`px-4 py-2 font-display font-bold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'media' ? 'text-cp-yellow border-b-2 border-cp-yellow' : 'text-gray-400 hover:text-white'}`}
+          >
+            <ImageIcon className="w-5 h-5" /> Media Forge
+          </button>
+          <button 
+            onClick={() => setActiveTab('audio')}
+            className={`px-4 py-2 font-display font-bold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'audio' ? 'text-cp-yellow border-b-2 border-cp-yellow' : 'text-gray-400 hover:text-white'}`}
+          >
+            <Mic className="w-5 h-5" /> Comms Hub
+          </button>
+        </nav>
 
-      {activeTab === 'chat' && (
-        user ? <Chatbot activeProfile={activeProfile} /> : <AuthPrompt title={activeProfile === 'ac' ? "Animus Knowledge Link" : "Neural Link"} />
-      )}
+        {/* Main Content Area */}
+        {activeTab === 'dashboard' && (
+          !gameState ? (
+            <div className="flex-grow flex items-center justify-center text-cp-cyan font-display">
+              <div className="text-center">
+                <Zap className="w-16 h-16 mx-auto mb-4 animate-pulse" />
+                <h1 className="text-3xl tracking-widest uppercase glitch-text" data-text={activeProfile === 'ac' ? "INITIALIZING ANIMUS SYNAPSE CORE" : "INITIALIZING SENSEI MRC-OVERWATCH"}>
+                  {activeProfile === 'ac' ? "INITIALIZING ANIMUS SYNAPSE CORE" : "INITIALIZING SENSEI MRC-OVERWATCH"}
+                </h1>
+                <p className="mt-2 text-cp-yellow opacity-70">
+                  {activeProfile === 'ac' ? "Calibrating Genetic Memetic Array..." : "Awaiting Regional Supervisor Handshake..."}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <TimeRangeProvider>
+              <Dashboard 
+                gameState={gameState} 
+                logs={logs} 
+                addLog={addLog}
+                triggerMockUpdate={triggerMockUpdate} 
+                alertThreshold={alertThreshold}
+                setAlertThreshold={setAlertThreshold}
+                alertEnabled={alertEnabled}
+                setAlertEnabled={setAlertEnabled}
+                alertVisual={alertVisual}
+                setAlertVisual={setAlertVisual}
+                alertSound={alertSound}
+                setAlertSound={setAlertSound}
+                activeProfile={activeProfile}
+              />
+            </TimeRangeProvider>
+          )
+        )}
 
-      {activeTab === 'media' && (
-        user ? <MediaGen activeProfile={activeProfile} /> : <AuthPrompt title={activeProfile === 'ac' ? "Memetic Forge" : "Media Forge"} />
-      )}
+        {activeTab === 'story' && (
+          <HorizonTerminal />
+        )}
 
-      {activeTab === 'audio' && (
-        user ? <AudioTools activeProfile={activeProfile} /> : <AuthPrompt title={activeProfile === 'ac' ? "Animus Communication Hub" : "Comms Hub"} />
-      )}
-      
-      {/* Footer Instructions */}
-      <footer className="mt-8 text-center text-xs text-gray-500 font-mono">
-        <p>To connect the Python Vision Module, point SENSEI_NODE_URL to: <span className="text-cp-cyan">{window.location.origin}/update_state</span></p>
-      </footer>
-      
-      {/* Floating Interactive UI Layers HUD Controller */}
-      <UiLayers layers={uiLayers} onChange={setUiLayers} activeProfile={activeProfile} />
-        </motion.div>
-      </AnimatePresence>
-    </UiLayersOverlay>
-  );
-}
+        {activeTab === 'chat' && (
+          user ? <Chatbot activeProfile={activeProfile} /> : <AuthPrompt title={activeProfile === 'ac' ? "Animus Knowledge Link" : "Neural Link"} />
+        )}
+
+        {activeTab === 'media' && (
+          user ? <MediaGen activeProfile={activeProfile} /> : <AuthPrompt title={activeProfile === 'ac' ? "Memetic Forge" : "Media Forge"} />
+        )}
+
+        {activeTab === 'audio' && (
+          user ? <AudioTools activeProfile={activeProfile} /> : <AuthPrompt title={activeProfile === 'ac' ? "Animus Communication Hub" : "Comms Hub"} />
+        )}
+        
+        {/* Footer Instructions */}
+        <footer className="mt-8 text-center text-xs text-gray-500 font-mono">
+          <p>To connect the Python Vision Module, point SENSEI_NODE_URL to: <span className="text-cp-cyan">{window.location.origin}/update_state</span></p>
+        </footer>
+        
+        {/* Floating Interactive UI Layers HUD Controller */}
+        <UiLayers layers={uiLayers} onChange={setUiLayers} activeProfile={activeProfile} />
+          </motion.div>
+        </AnimatePresence>
+      </UiLayersOverlay>
+    );
+  }
