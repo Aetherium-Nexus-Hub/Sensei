@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from '@google/genai';
+import { sanitizeInput } from '../utils/sanitize';
 import { 
   Sparkles, Send, Mic, MicOff, X, Terminal, Brain, 
   HelpCircle, ChevronRight, Activity, Loader2, Volume2 
@@ -93,9 +94,10 @@ export default function SenseiOracle({
   ];
 
   const handleQuery = async (userPrompt: string) => {
-    if (!userPrompt.trim() || loading) return;
+    const sanitizedPrompt = sanitizeInput(userPrompt);
+    if (!sanitizedPrompt.trim() || loading) return;
 
-    setMessages(prev => [...prev, { role: 'user', text: userPrompt }]);
+    setMessages(prev => [...prev, { role: 'user', text: sanitizedPrompt }]);
     setInput('');
     setLoading(true);
 

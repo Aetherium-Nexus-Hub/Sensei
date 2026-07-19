@@ -5,6 +5,7 @@ import Markdown from 'react-markdown';
 import { auth, db } from '../firebase';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
+import { sanitizeInput } from '../utils/sanitize';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -68,7 +69,7 @@ export default function Chatbot({ activeProfile = 'cb77' }: ChatbotProps) {
     if (!input.trim() && !file) return;
     if (!auth.currentUser) return;
 
-    const userText = input;
+    const userText = sanitizeInput(input);
     setInput('');
     const currentFile = file;
     setFile(null);

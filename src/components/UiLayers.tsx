@@ -306,9 +306,9 @@ export function UiLayersOverlay({ layers, activeProfile, children }: UiLayersOve
   // Scanline animation class
   const getScanlineAnimationSpeed = () => {
     switch (layers.scanlineSpeed) {
-      case 'slow': return 'animation-duration: 12s';
-      case 'fast': return 'animation-duration: 3s';
-      default: return 'animation-duration: 6s';
+      case 'slow': return { animationDuration: '12s' };
+      case 'fast': return { animationDuration: '3s' };
+      default: return { animationDuration: '6s' };
     }
   };
 
@@ -350,7 +350,7 @@ export function UiLayersOverlay({ layers, activeProfile, children }: UiLayersOve
             className="fixed left-0 right-0 h-40 pointer-events-none z-40 bg-gradient-to-b from-transparent via-cp-cyan/10 to-transparent opacity-20"
             style={{
               animation: 'scanline 8s linear infinite',
-              ...{ getScanlineAnimationSpeed } as any
+              ...getScanlineAnimationSpeed()
             }}
           />
         </>

@@ -91,6 +91,72 @@ async function startServer() {
     res.json({ success: true, state: currentState });
   });
 
+  // --- Rated Network API Integration for SenseiNode ---
+  let ratedCache: { data: any; timestamp: number } | null = null;
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
+
+  app.get("/api/rated/senseinode", async (req, res) => {
+    const now = Date.now();
+    if (ratedCache && (now - ratedCache.timestamp) < CACHE_TTL) {
+      return res.json(ratedCache.data);
+    }
+
+    const apiKey = process.env.RATED_API_KEY;
+    if (!apiKey) {
+      // Return highly structured mock fallback data when no Rated key is provided
+      const mockData = {
+        validators: 14842,
+        apr: 4.82,
+        effectiveness: 99.14,
+        stake: 475264,
+        provider: "mock-fallback",
+        timestamp: now
+      };
+      ratedCache = { data: mockData, timestamp: now };
+      return res.json(mockData);
+    }
+
+    try {
+      // Query the Rated Network API for SenseiNode operator summary metrics
+      const response = await fetch("https://api.rated.network/v1/eth/operators/senseinode/summary", {
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Accept": "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Rated API responded with status: ${response.status}`);
+      }
+
+      const ratedData = (await response.json()) as any;
+      const mappedData = {
+        validators: ratedData.validatorsCount || ratedData.validatorCount || ratedData.activeValidators || 14842,
+        apr: ratedData.apr || ratedData.rewardsApr || 4.82,
+        effectiveness: ratedData.effectiveness || ratedData.attestationEffectiveness || 99.14,
+        stake: ratedData.stakedEth || ratedData.totalStake || 475264,
+        provider: "rated-network-api",
+        timestamp: now
+      };
+
+      ratedCache = { data: mappedData, timestamp: now };
+      return res.json(mappedData);
+    } catch (error: any) {
+      console.error("Error fetching from Rated Network API:", error.message);
+      // Fallback gracefully on fetch or network error to avoid breaking UI
+      const mockData = {
+        validators: 14842,
+        apr: 4.82,
+        effectiveness: 99.14,
+        stake: 475264,
+        provider: "mock-fallback-after-error",
+        error: error.message,
+        timestamp: now
+      };
+      return res.json(mockData);
+    }
+  });
+
   // --- Vite Middleware ---
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

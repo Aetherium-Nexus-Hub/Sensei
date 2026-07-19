@@ -5,13 +5,15 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
 import { BarChart3, TrendingUp, HelpCircle, Share2, Grid, Layers, Network, Server } from 'lucide-react';
+import { RatedData } from './HeroTelemetry';
 
 interface ChartHubProps {
   activeProfile?: 'cb77' | 'ac';
   healthHistory: { time: string; health: number }[];
+  ratedData?: RatedData | null;
 }
 
-export default function ChartHub({ activeProfile = 'cb77', healthHistory }: ChartHubProps) {
+export default function ChartHub({ activeProfile = 'cb77', healthHistory, ratedData }: ChartHubProps) {
   const isAc = activeProfile === 'ac';
   const [activeTab, setActiveTab] = useState<'apr' | 'rewards' | 'breakdown' | 'diversity' | 'nodemap'>('apr');
   const [timeRange, setTimeRange] = useState<'1d' | '7d' | '30d' | 'all'>('7d');
@@ -37,8 +39,8 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory }: Char
     const points = timeRange === '1d' ? 24 : timeRange === '7d' ? 7 : timeRange === '30d' ? 15 : 12;
     return Array.from({ length: points }).map((_, i) => {
       const label = timeRange === '1d' ? `${i}:00` : timeRange === '7d' ? `Day ${i + 1}` : timeRange === '30d' ? `Day ${i * 2 + 1}` : `Month ${i + 1}`;
-      // Simulate slow drift in APR
-      const baseApr = isAc ? 4.65 : 4.82;
+      // Simulate slow drift in APR using real Rated APR as baseline
+      const baseApr = ratedData?.apr ?? (isAc ? 4.65 : 4.82);
       const apr = baseApr + Math.sin(i * 0.4) * 0.15 + (Math.random() * 0.08);
       return { name: label, apr: parseFloat(apr.toFixed(2)) };
     });
@@ -72,19 +74,33 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory }: Char
     });
   };
 
-  const getPieData = () => [
-    { name: isAc ? 'Consensus Loop' : 'Attestations', value: 55 },
-    { name: isAc ? 'Ancestral Prop' : 'Block Proposals', value: 20 },
-    { name: isAc ? 'Memetic Boost' : 'MEV Boost', value: 18 },
-    { name: isAc ? 'Tribute Tips' : 'Execution Tips', value: 7 }
-  ];
+  const getPieData = () => {
+    let base = [55, 20, 18, 7];
+    if (timeRange === '1d') base = [52, 22, 17, 9];
+    if (timeRange === '30d') base = [58, 17, 16, 9];
+    if (timeRange === 'all') base = [54, 21, 17, 8];
 
-  const getDiversityData = () => [
-    { name: 'Geth', share: 45 },
-    { name: 'Nethermind', share: 30 },
-    { name: 'Besu', share: 15 },
-    { name: 'Erigon', share: 10 }
-  ];
+    return [
+      { name: isAc ? 'Consensus Loop' : 'Attestations', value: base[0] },
+      { name: isAc ? 'Ancestral Prop' : 'Block Proposals', value: base[1] },
+      { name: isAc ? 'Memetic Boost' : 'MEV Boost', value: base[2] },
+      { name: isAc ? 'Tribute Tips' : 'Execution Tips', value: base[3] }
+    ];
+  };
+
+  const getDiversityData = () => {
+    let base = [45, 30, 15, 10];
+    if (timeRange === '1d') base = [48, 28, 14, 10];
+    if (timeRange === '30d') base = [43, 32, 16, 9];
+    if (timeRange === 'all') base = [44, 31, 15, 10];
+
+    return [
+      { name: 'Geth', share: base[0] },
+      { name: 'Nethermind', share: base[1] },
+      { name: 'Besu', share: base[2] },
+      { name: 'Erigon', share: base[3] }
+    ];
+  };
 
   // Consensus Node Map positions
   const validatorNodes = [
@@ -102,6 +118,15 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory }: Char
     { id: 12, x: 52, y: 62, status: 'inactive', name: 'SENSEI-12', stake: '0.00 ETH', client: 'Lodestar/Besu', effectiveness: '0.0%' }
   ];
 
+  const getTabClass = (tab: 'apr' | 'rewards' | 'breakdown' | 'diversity' | 'nodemap') => {
+    const activeStyle = isAc 
+      ? 'bg-cp-yellow text-black border-cp-yellow' 
+      : 'bg-cp-cyan text-black border-cp-cyan';
+    return `px-3 py-1.5 text-[9px] font-bold uppercase border flex items-center gap-1.5 cursor-pointer transition-all duration-300 ${
+      activeTab === tab ? activeStyle : 'border-white/5 text-gray-400 hover:border-white/20'
+    }`;
+  };
+
   return (
     <div className="cp-border p-5 bg-cp-dark/60 flex flex-col font-mono relative overflow-hidden">
       <div className="absolute top-0 right-0 p-2 text-[8px] text-gray-500 uppercase tracking-[0.2em]">
@@ -111,21 +136,23 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory }: Char
       {/* Title & Time Selector */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/5 pb-4 mb-4">
         <div className="flex items-center gap-3">
-          <Layers className="w-5 h-5 text-cp-cyan" />
+          <Layers className={isAc ? "w-5 h-5 text-cp-yellow" : "w-5 h-5 text-cp-cyan"} />
           <h2 className="text-sm font-display font-bold uppercase tracking-[0.2em]">
             {isAc ? "Genetic Anchor Chart Matrix" : "Validator Chart Hub"}
           </h2>
         </div>
 
-        {/* Global Time Range Selector */}
-        {activeTab !== 'breakdown' && activeTab !== 'diversity' && activeTab !== 'nodemap' && (
+        {/* Global Time Range Selector - Shared across all except map */}
+        {activeTab !== 'nodemap' && (
           <div className="flex items-center gap-1 bg-black/60 p-0.5 border border-white/5 rounded">
             {(['1d', '7d', '30d', 'all'] as const).map((range) => (
               <button
                 key={range}
                 onClick={() => setTimeRange(range)}
                 className={`px-2 py-0.5 text-[9px] font-bold uppercase transition-all cursor-pointer ${
-                  timeRange === range ? 'bg-cp-cyan text-black' : 'text-gray-400 hover:text-white'
+                  timeRange === range 
+                    ? (isAc ? 'bg-cp-yellow text-black font-black' : 'bg-cp-cyan text-black font-black') 
+                    : 'text-gray-400 hover:text-white'
                 }`}
               >
                 {range}
@@ -139,41 +166,31 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory }: Char
       <div className="flex flex-wrap gap-1.5 border-b border-white/5 pb-3 mb-4">
         <button
           onClick={() => setActiveTab('apr')}
-          className={`px-3 py-1.5 text-[9px] font-bold uppercase border flex items-center gap-1.5 cursor-pointer transition-colors ${
-            activeTab === 'apr' ? 'bg-cp-cyan text-black border-cp-cyan' : 'border-white/5 text-gray-400 hover:border-white/20'
-          }`}
+          className={getTabClass('apr')}
         >
           <TrendingUp className="w-3.5 h-3.5" /> APR Drift
         </button>
         <button
           onClick={() => setActiveTab('rewards')}
-          className={`px-3 py-1.5 text-[9px] font-bold uppercase border flex items-center gap-1.5 cursor-pointer transition-colors ${
-            activeTab === 'rewards' ? 'bg-cp-cyan text-black border-cp-cyan' : 'border-white/5 text-gray-400 hover:border-white/20'
-          }`}
+          className={getTabClass('rewards')}
         >
           <Layers className="w-3.5 h-3.5" /> Stacked Rewards
         </button>
         <button
           onClick={() => setActiveTab('breakdown')}
-          className={`px-3 py-1.5 text-[9px] font-bold uppercase border flex items-center gap-1.5 cursor-pointer transition-colors ${
-            activeTab === 'breakdown' ? 'bg-cp-cyan text-black border-cp-cyan' : 'border-white/5 text-gray-400 hover:border-white/20'
-          }`}
+          className={getTabClass('breakdown')}
         >
           <BarChart3 className="w-3.5 h-3.5" /> Rewards Split
         </button>
         <button
           onClick={() => setActiveTab('diversity')}
-          className={`px-3 py-1.5 text-[9px] font-bold uppercase border flex items-center gap-1.5 cursor-pointer transition-colors ${
-            activeTab === 'diversity' ? 'bg-cp-cyan text-black border-cp-cyan' : 'border-white/5 text-gray-400 hover:border-white/20'
-          }`}
+          className={getTabClass('diversity')}
         >
           <Server className="w-3.5 h-3.5" /> Client Share
         </button>
         <button
           onClick={() => setActiveTab('nodemap')}
-          className={`px-3 py-1.5 text-[9px] font-bold uppercase border flex items-center gap-1.5 cursor-pointer transition-colors ${
-            activeTab === 'nodemap' ? 'bg-cp-cyan text-black border-cp-cyan' : 'border-white/5 text-gray-400 hover:border-white/20'
-          }`}
+          className={getTabClass('nodemap')}
         >
           <Network className="w-3.5 h-3.5 animate-pulse" /> Consensus Node Map
         </button>
@@ -307,11 +324,13 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory }: Char
                       ? 'bg-cp-red/20 border-cp-red shadow-[0_0_8px_rgba(255,0,0,0.6)] animate-ping' 
                       : node.status === 'inactive' 
                       ? 'bg-gray-800 border-gray-600'
+                      : isAc
+                      ? 'bg-cp-yellow/20 border-cp-yellow hover:scale-125 hover:bg-cp-yellow/40 shadow-[0_0_6px_rgba(212,175,55,0.4)]'
                       : 'bg-cp-cyan/20 border-cp-cyan hover:scale-125 hover:bg-cp-cyan/40 shadow-[0_0_6px_rgba(0,240,255,0.4)]'
                   }`}
                 >
                   <span className={`w-1.5 h-1.5 rounded-full ${
-                    node.status === 'slashing' ? 'bg-cp-red' : node.status === 'inactive' ? 'bg-gray-500' : 'bg-cp-cyan'
+                    node.status === 'slashing' ? 'bg-cp-red' : node.status === 'inactive' ? 'bg-gray-500' : isAc ? 'bg-cp-yellow' : 'bg-cp-cyan'
                   }`} />
                 </button>
               ))}
@@ -335,7 +354,7 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory }: Char
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">CLIENT:</span>
-                      <span className="text-cp-cyan">{(hoveredNode || validatorNodes[0]).client}</span>
+                      <span className={isAc ? 'text-cp-yellow' : 'text-cp-cyan'}>{(hoveredNode || validatorNodes[0]).client}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">EFFECTIV:</span>
@@ -345,7 +364,7 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory }: Char
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-400">STATUS:</span>
-                      <span className={`font-black uppercase ${(hoveredNode || validatorNodes[0]).status === 'slashing' ? 'text-cp-red animate-pulse' : (hoveredNode || validatorNodes[0]).status === 'inactive' ? 'text-gray-500' : 'text-cp-cyan'}`}>
+                      <span className={`font-black uppercase ${(hoveredNode || validatorNodes[0]).status === 'slashing' ? 'text-cp-red animate-pulse' : (hoveredNode || validatorNodes[0]).status === 'inactive' ? 'text-gray-500' : isAc ? 'text-cp-yellow' : 'text-cp-cyan'}`}>
                         {(hoveredNode || validatorNodes[0]).status}
                       </span>
                     </div>

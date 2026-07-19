@@ -112,10 +112,10 @@ service cloud.firestore {
       allow delete: if isDocOwner() || isAdmin();
       
       match /messages/{messageId} {
-        allow read: if isAuthenticated() && (get(/databases/$(database)/documents/chats/$(chatId)).data.uid == request.auth.uid || isAdmin());
-        allow create: if isAuthenticated() && isValidChatMessage(request.resource.data) && uidUnchanged() && (get(/databases/$(database)/documents/chats/$(chatId)).data.uid == request.auth.uid);
+        allow read: if isAuthenticated() && (chatId == request.auth.uid || (exists(/databases/$(database)/documents/chats/$(chatId)) && get(/databases/$(database)/documents/chats/$(chatId)).data.uid == request.auth.uid) || isAdmin());
+        allow create: if isAuthenticated() && isValidChatMessage(request.resource.data) && uidUnchanged() && (chatId == request.auth.uid || (exists(/databases/$(database)/documents/chats/$(chatId)) && get(/databases/$(database)/documents/chats/$(chatId)).data.uid == request.auth.uid));
         allow update: if false; // Messages are immutable
-        allow delete: if isAuthenticated() && (get(/databases/$(database)/documents/chats/$(chatId)).data.uid == request.auth.uid || isAdmin());
+        allow delete: if isAuthenticated() && (chatId == request.auth.uid || (exists(/databases/$(database)/documents/chats/$(chatId)) && get(/databases/$(database)/documents/chats/$(chatId)).data.uid == request.auth.uid) || isAdmin());
       }
     }
     

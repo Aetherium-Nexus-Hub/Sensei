@@ -12,7 +12,7 @@ import {
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 import TelemetryChart from './TelemetryChart';
-import HeroTelemetry from './HeroTelemetry';
+import HeroTelemetry, { RatedData } from './HeroTelemetry';
 import ChartHub from './ChartHub';
 import AlertFeed from './AlertFeed';
 import SenseiOracle from './SenseiOracle';
@@ -88,6 +88,35 @@ export default function Dashboard({
   const [combatEvents, setCombatEvents] = useState<{ id: string; time: string; type: 'DAMAGE' | 'HEAL' | 'ELIM' | 'ULT'; desc: string }[]>([]);
 
   const isAc = activeProfile === 'ac';
+
+  // Rated Network Telemetry State
+  const [ratedData, setRatedData] = useState<RatedData | null>(null);
+  const [isRatedLoading, setIsRatedLoading] = useState<boolean>(false);
+  const [ratedError, setRatedError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchRatedTelemetry = async () => {
+      setIsRatedLoading(true);
+      setRatedError(null);
+      try {
+        const res = await fetch("/api/rated/senseinode");
+        if (res.ok) {
+          const data = await res.json();
+          setRatedData(data);
+        } else {
+          setRatedError("Could not retrieve telemetry");
+        }
+      } catch (err) {
+        console.error("Error fetching Rated Network telemetry from API:", err);
+        setRatedError("Network offline");
+      } finally {
+        setIsRatedLoading(false);
+      }
+    };
+    fetchRatedTelemetry();
+    const ratedInterval = setInterval(fetchRatedTelemetry, 60000); // refresh every 60s
+    return () => clearInterval(ratedInterval);
+  }, []);
 
   // Oracle & Command Palette UI states
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -533,6 +562,9 @@ export default function Dashboard({
           gameState={gameState} 
           activeProfile={activeProfile} 
           alertThreshold={alertThreshold} 
+          ratedData={ratedData}
+          isRatedLoading={isRatedLoading}
+          ratedError={ratedError}
         />
       </div>
 
@@ -800,7 +832,7 @@ export default function Dashboard({
         </motion.div>
 
         {/* Full-width Interactive Chart Hub (APR, Staked Area, Diversity, Heatmap, Consensus Nodes) */}
-        <ChartHub activeProfile={activeProfile} healthHistory={healthHistory} />
+        <ChartHub activeProfile={activeProfile} healthHistory={healthHistory} ratedData={ratedData} />
 
         {/* Live Visual Telemetry Grid (Mission Logic & Terminal + Cloud Backup Sync) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

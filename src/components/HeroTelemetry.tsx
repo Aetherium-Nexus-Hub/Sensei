@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Radio, TrendingUp, Network, ShieldAlert, Clock, CloudRain, Cpu } from 'lucide-react';
+import { Radio, TrendingUp, Network, ShieldAlert, Clock, CloudRain, Cpu, RefreshCw } from 'lucide-react';
+
+export interface RatedData {
+  validators: number;
+  apr: number;
+  effectiveness: number;
+  stake: number;
+  provider: string;
+  timestamp: number;
+}
 
 interface HeroTelemetryProps {
   gameState: {
@@ -13,9 +22,19 @@ interface HeroTelemetryProps {
   };
   activeProfile?: 'cb77' | 'ac';
   alertThreshold: number;
+  ratedData?: RatedData | null;
+  isRatedLoading?: boolean;
+  ratedError?: string | null;
 }
 
-export default function HeroTelemetry({ gameState, activeProfile = 'cb77', alertThreshold }: HeroTelemetryProps) {
+export default function HeroTelemetry({ 
+  gameState, 
+  activeProfile = 'cb77', 
+  alertThreshold, 
+  ratedData,
+  isRatedLoading = false,
+  ratedError = null
+}: HeroTelemetryProps) {
   const isAc = activeProfile === 'ac';
   
   // Real Ethereum beacon chain slot and epoch simulation based on time elapsed since launch
@@ -23,6 +42,7 @@ export default function HeroTelemetry({ gameState, activeProfile = 'cb77', alert
   const [epoch, setEpoch] = useState(94531);
   const [validatorsCount, setValidatorsCount] = useState(14842);
   const [deltaCount, setDeltaCount] = useState(12);
+  const [slotCountdown, setSlotCountdown] = useState(12.0);
 
   useEffect(() => {
     // Standard genesis: Dec 1, 2020. Current year: 2026.
@@ -39,6 +59,14 @@ export default function HeroTelemetry({ gameState, activeProfile = 'cb77', alert
     calculateSlots();
     const interval = setInterval(calculateSlots, 12000); // Update every slot boundary
 
+    // Live countdown timer for current slot progress
+    const countdownInterval = setInterval(() => {
+      const diffMs = Date.now() - genesisTimeMs;
+      const msInCurrentSlot = diffMs % 12000;
+      const remainingMs = 12000 - msInCurrentSlot;
+      setSlotCountdown(remainingMs / 1000);
+    }, 100);
+
     // Slowly fluctuate validator delta to feel alive
     const validatorInterval = setInterval(() => {
       setValidatorsCount(prev => prev + (Math.random() > 0.6 ? 1 : Math.random() > 0.9 ? -1 : 0));
@@ -47,19 +75,25 @@ export default function HeroTelemetry({ gameState, activeProfile = 'cb77', alert
 
     return () => {
       clearInterval(interval);
+      clearInterval(countdownInterval);
       clearInterval(validatorInterval);
     };
   }, []);
+
+  const displayValidators = ratedData?.validators ?? validatorsCount;
+  const displayApr = ratedData?.apr ?? 4.82;
+  const displayEffectiveness = ratedData?.effectiveness ?? 99.14;
+  const displayStake = ratedData?.stake ?? 475264;
 
   // Theme adaptations
   const terms = {
     validatorsTitle: isAc ? "Synchronized Animus Relays" : "Active Validators (SenseiNode)",
     validatorsDesc: isAc ? `+${deltaCount} memory links synchronized` : `+${deltaCount} active this epoch`,
     stakeTitle: isAc ? "Synchronized Memories" : "Total Stake (ETH)",
-    stakeVal: isAc ? "475.2k Helix" : "475,264 ETH",
-    stakeDesc: isAc ? "Rate: 4.82% sync gain" : "4.82% APR (MEV boosted)",
+    stakeVal: isAc ? `${(displayStake / 1000).toFixed(1)}k Helix` : `${displayStake.toLocaleString()} ETH`,
+    stakeDesc: isAc ? `Rate: ${displayApr}% sync gain` : `${displayApr}% APR (MEV boosted)`,
     effectivenessTitle: isAc ? "Sync Harmonization" : "Network Effectiveness",
-    effectivenessVal: "99.14%",
+    effectivenessVal: `${displayEffectiveness}%`,
     effectivenessDesc: isAc ? "Harmonization lock stable" : "RAVER index optimal",
     healthTitle: isAc ? "Synapse Integrity" : "Node Health Score",
     healthDesc: isAc ? "Animus core stabilizer link" : "Derived from active alerts",
@@ -81,11 +115,17 @@ export default function HeroTelemetry({ gameState, activeProfile = 'cb77', alert
       >
         <div className="flex items-center justify-between text-cp-cyan mb-2">
           <span className="text-[10px] font-bold uppercase tracking-widest">{terms.validatorsTitle}</span>
-          <Radio className="w-4 h-4 animate-pulse text-cp-cyan" />
+          {isRatedLoading ? (
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-cp-cyan" />
+          ) : ratedError ? (
+            <span className="text-[8px] text-cp-red font-bold">ERR</span>
+          ) : (
+            <Radio className="w-4 h-4 animate-pulse text-cp-cyan" />
+          )}
         </div>
         <div>
           <span className="text-3xl font-display font-black text-white tracking-tighter">
-            {validatorsCount.toLocaleString()}
+            {displayValidators.toLocaleString()}
           </span>
           <div className="text-[9px] text-cp-cyan/80 mt-1 font-mono uppercase">
             {terms.validatorsDesc}
@@ -102,7 +142,13 @@ export default function HeroTelemetry({ gameState, activeProfile = 'cb77', alert
       >
         <div className="flex items-center justify-between text-cp-yellow mb-2">
           <span className="text-[10px] font-bold uppercase tracking-widest">{terms.stakeTitle}</span>
-          <TrendingUp className="w-4 h-4 text-cp-yellow" />
+          {isRatedLoading ? (
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-cp-yellow" />
+          ) : ratedError ? (
+            <span className="text-[8px] text-cp-red font-bold">ERR</span>
+          ) : (
+            <TrendingUp className="w-4 h-4 text-cp-yellow" />
+          )}
         </div>
         <div>
           <span className="text-3xl font-display font-black text-white tracking-tighter">
@@ -124,7 +170,13 @@ export default function HeroTelemetry({ gameState, activeProfile = 'cb77', alert
       >
         <div className="flex items-center justify-between text-cp-cyan mb-2">
           <span className="text-[10px] font-bold uppercase tracking-widest">{terms.effectivenessTitle}</span>
-          <Network className="w-4 h-4 text-cp-cyan" />
+          {isRatedLoading ? (
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-cp-cyan" />
+          ) : ratedError ? (
+            <span className="text-[8px] text-cp-red font-bold">ERR</span>
+          ) : (
+            <Network className="w-4 h-4 text-cp-cyan" />
+          )}
         </div>
         <div>
           <span className="text-3xl font-display font-black text-white tracking-tighter">
@@ -141,17 +193,32 @@ export default function HeroTelemetry({ gameState, activeProfile = 'cb77', alert
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.08 }}
-        className={`cp-border p-4 bg-cp-dark/60 border-l-4 flex flex-col justify-between transition-all ${
+        className={`cp-border p-4 bg-cp-dark/60 border-l-4 flex flex-col justify-between transition-all relative overflow-hidden ${
           isAlarm ? 'border-l-cp-red bg-cp-red/5 shadow-[inset_0_0_15px_rgba(255,0,60,0.1)]' : 'border-l-green-500'
         }`}
       >
-        <div className="flex items-center justify-between mb-2">
+        {isAlarm && (
+          <>
+            {/* CRT scanline simulation */}
+            <div className="absolute inset-0 pointer-events-none bg-linear-to-b from-cp-red/5 to-transparent bg-[size:100%_4px] opacity-40 animate-[pulse_1.5s_infinite]" />
+            {/* Vignette flashing warning */}
+            <div className="absolute inset-0 pointer-events-none border border-cp-red/20 shadow-[inset_0_0_20px_rgba(255,0,60,0.25)] animate-pulse" />
+            <div className="absolute top-1.5 right-8 text-[7px] text-cp-red/70 font-black tracking-widest uppercase animate-pulse">
+              LEAKAGE_RISK
+            </div>
+            {/* Animated digital signal lines */}
+            <span className="absolute bottom-1 right-2 text-[6px] text-cp-red/40 font-mono select-none">
+              ERR_CODE_0x9A
+            </span>
+          </>
+        )}
+        <div className="flex items-center justify-between mb-2 relative z-10">
           <span className={`text-[10px] font-bold uppercase tracking-widest ${isAlarm ? 'text-cp-red' : 'text-green-500'}`}>
             {terms.healthTitle}
           </span>
           <ShieldAlert className={`w-4 h-4 ${isAlarm ? 'text-cp-red animate-bounce' : 'text-green-500'}`} />
         </div>
-        <div>
+        <div className="relative z-10">
           <span className={`text-3xl font-display font-black tracking-tighter ${isAlarm ? 'text-cp-red' : 'text-white'}`}>
             {gameState.health_percent}%
           </span>
@@ -181,7 +248,11 @@ export default function HeroTelemetry({ gameState, activeProfile = 'cb77', alert
             <span className="text-gray-500 uppercase text-[9px]">{terms.clockSlotLabel}</span>
             <span className="text-cp-yellow font-bold">{slot.toLocaleString()}</span>
           </div>
-          <div className="flex justify-between items-center text-[10px] pt-1 border-t border-white/5 text-gray-400">
+          <div className="flex justify-between items-center text-xs border-b border-white/5 pb-1 mb-1">
+            <span className="text-gray-500 uppercase text-[9px]">Slot Progress</span>
+            <span className="text-cp-cyan font-bold">{slotCountdown.toFixed(1)}s</span>
+          </div>
+          <div className="flex justify-between items-center text-[10px] pt-1 text-gray-400">
             <span className="truncate max-w-[70px] uppercase text-[9px]">{gameState.district}</span>
             <span className="text-cp-cyan font-bold text-[8px]">{gameState.weather}</span>
           </div>
