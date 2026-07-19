@@ -14,7 +14,11 @@ interface Generation {
   createdAt: string;
 }
 
-export default function MediaGen() {
+interface MediaGenProps {
+  activeProfile?: 'cb77' | 'ac';
+}
+
+export default function MediaGen({ activeProfile = 'cb77' }: MediaGenProps) {
   const [prompt, setPrompt] = useState('');
   const [mode, setMode] = useState<'image-pro' | 'video'>('image-pro');
   const [aspectRatio, setAspectRatio] = useState<'1:1' | '16:9' | '9:16'>('1:1');

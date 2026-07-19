@@ -6,7 +6,11 @@ import { auth } from '../firebase';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
-export default function AudioTools() {
+interface AudioToolsProps {
+  activeProfile?: 'cb77' | 'ac';
+}
+
+export default function AudioTools({ activeProfile = 'cb77' }: AudioToolsProps) {
   const [mode, setMode] = useState<'live' | 'tts' | 'transcribe'>('live');
   const [isRecording, setIsRecording] = useState(false);
   const [isLiveConnected, setIsLiveConnected] = useState(false);

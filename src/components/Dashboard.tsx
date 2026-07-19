@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { Activity, MapPin, Clock, CloudRain, Crosshair, Terminal, Zap, ShieldAlert, Cpu, Network, Users, TrendingUp, Link as LinkIcon, RefreshCw, Eye, BarChart3 } from 'lucide-react';
+import { Activity, MapPin, Clock, CloudRain, Crosshair, Terminal, Zap, ShieldAlert, Cpu, Network, Users, TrendingUp, Link as LinkIcon, RefreshCw, Eye, BarChart3, Download } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -76,6 +76,61 @@ export default function Dashboard({
   const [combatEvents, setCombatEvents] = useState<{ id: string; time: string; type: 'DAMAGE' | 'HEAL' | 'ELIM' | 'ULT'; desc: string }[]>([]);
 
   const isAc = activeProfile === 'ac';
+
+  const handleDownloadLogs = (format: 'json' | 'csv') => {
+    if (logs.length === 0) return;
+
+    const parsedLogs = logs.map((log, index) => {
+      // Parse timestamp e.g. [11:04:12] and message
+      const match = log.match(/^\[(.*?)\] (.*)$/);
+      if (match) {
+        return {
+          id: index,
+          timestamp: match[1],
+          message: match[2]
+        };
+      }
+      return {
+        id: index,
+        timestamp: new Date().toLocaleTimeString(),
+        message: log
+      };
+    });
+
+    let fileContent = '';
+    let mimeType = '';
+    let fileExtension = '';
+
+    if (format === 'json') {
+      fileContent = JSON.stringify(parsedLogs, null, 2);
+      mimeType = 'application/json';
+      fileExtension = 'json';
+    } else {
+      // CSV Export
+      const headers = ['ID', 'Timestamp', 'Message'];
+      const rows = parsedLogs.map(item => {
+        const escapedMsg = item.message.replace(/"/g, '""');
+        return `${item.id},"${item.timestamp}","${escapedMsg}"`;
+      });
+      fileContent = [headers.join(','), ...rows].join('\n');
+      mimeType = 'text/csv';
+      fileExtension = 'csv';
+    }
+
+    const blob = new Blob([fileContent], { type: `${mimeType};charset=utf-8;` });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const timeStr = new Date().toLocaleTimeString().replace(/:/g, '-');
+    link.setAttribute('download', `telemetry_logs_${dateStr}_${timeStr}.${fileExtension}`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    addLog(`SYSTEM: Telemetry logs exported as ${format.toUpperCase()}`);
+  };
 
   const terms = {
     infrastructure: isAc ? "Animus Core Matrix" : "Regional Infrastructure",
@@ -609,7 +664,27 @@ export default function Dashboard({
                     <Terminal className="w-4 h-4 text-cp-cyan" />
                     <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">{terms.supervisorLog}</span>
                   </div>
-                  <span className="text-[8px] text-cp-cyan/50">{terms.nodeAlpha}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[8px] text-gray-600 uppercase hidden sm:inline">Export:</span>
+                    <button 
+                      onClick={() => handleDownloadLogs('json')}
+                      disabled={logs.length === 0}
+                      className="px-1.5 py-0.5 bg-cp-cyan/10 hover:bg-cp-cyan/30 active:bg-cp-cyan text-cp-cyan active:text-black border border-cp-cyan/30 rounded text-[8px] tracking-wider transition-all uppercase font-bold cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1"
+                      title="Download Log as JSON"
+                    >
+                      <Download className="w-2.5 h-2.5" /> JSON
+                    </button>
+                    <button 
+                      onClick={() => handleDownloadLogs('csv')}
+                      disabled={logs.length === 0}
+                      className="px-1.5 py-0.5 bg-cp-yellow/10 hover:bg-cp-yellow/30 active:bg-cp-yellow text-cp-yellow active:text-black border border-cp-yellow/30 rounded text-[8px] tracking-wider transition-all uppercase font-bold cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1"
+                      title="Download Log as CSV"
+                    >
+                      <Download className="w-2.5 h-2.5" /> CSV
+                    </button>
+                    <span className="text-gray-800">|</span>
+                    <span className="text-[8px] text-cp-cyan/50">{terms.nodeAlpha}</span>
+                  </div>
                 </div>
                 <div className="bg-black/90 p-4 text-[10px] border border-white/5 flex-grow overflow-y-auto max-h-[150px] scrollbar-thin scrollbar-thumb-cp-cyan/30">
                   {logs.map((log, i) => (

@@ -1,12 +1,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Activity, MapPin, Clock, CloudRain, Crosshair, ShieldAlert, Terminal, Zap, MessageSquare, Image as ImageIcon, Mic } from 'lucide-react';
+import { Activity, MapPin, Clock, CloudRain, Crosshair, ShieldAlert, Terminal, Zap, MessageSquare, Image as ImageIcon, Mic, Compass, RefreshCw } from 'lucide-react';
 import { AuthButton, useAuth } from './components/Auth';
 import { signInWithGoogle } from './firebase';
 import Chatbot from './components/Chatbot';
 import MediaGen from './components/MediaGen';
 import AudioTools from './components/AudioTools';
 import Dashboard from './components/Dashboard';
+import HorizonTerminal from './components/HorizonTerminal';
+import UiLayers, { UiLayersOverlay, UiLayersState } from './components/UiLayers';
 
 interface GameState {
   district: string;
@@ -41,11 +43,84 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'chat' | 'media' | 'audio'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'chat' | 'media' | 'audio' | 'story'>('dashboard');
   const [activeProfile, setActiveProfile] = useState<'cb77' | 'ac'>(() => {
     const saved = localStorage.getItem('active_profile');
     return (saved as 'cb77' | 'ac') || 'cb77';
   });
+
+  const [uiLayers, setUiLayers] = useState<UiLayersState>(() => {
+    const saved = localStorage.getItem('ui_layers_state');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // Fallback
+      }
+    }
+    return {
+      crtScanlines: true,
+      chromaticAberration: false,
+      hudBrackets: false,
+      backgroundGrid: true,
+      filterMode: 'none',
+      scanlineSpeed: 'normal'
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('ui_layers_state', JSON.stringify(uiLayers));
+  }, [uiLayers]);
+
+  const [lastHeartbeat, setLastHeartbeat] = useState<Date | null>(() => {
+    const saved = localStorage.getItem('last_heartbeat_time');
+    return saved ? new Date(saved) : null;
+  });
+  const [relativeSyncTime, setRelativeSyncTime] = useState<string>('Syncing...');
+  const [isSyncFlashing, setIsSyncFlashing] = useState(false);
+
+  useEffect(() => {
+    if (isSyncFlashing) {
+      const timer = setTimeout(() => setIsSyncFlashing(false), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [isSyncFlashing]);
+
+  useEffect(() => {
+    if (lastHeartbeat) {
+      localStorage.setItem('last_heartbeat_time', lastHeartbeat.toISOString());
+    }
+  }, [lastHeartbeat]);
+
+  useEffect(() => {
+    const updateRelativeTime = () => {
+      if (!lastHeartbeat) {
+        setRelativeSyncTime('Never synced');
+        return;
+      }
+      const diffMs = Date.now() - lastHeartbeat.getTime();
+      const diffSecs = Math.floor(diffMs / 1000);
+      
+      if (diffSecs < 1) {
+        setRelativeSyncTime('0s ago');
+      } else if (diffSecs < 60) {
+        setRelativeSyncTime(`${diffSecs}s ago`);
+      } else {
+        const diffMins = Math.floor(diffSecs / 60);
+        const remSecs = diffSecs % 60;
+        if (diffMins < 60) {
+          setRelativeSyncTime(`${diffMins}m ${remSecs}s ago`);
+        } else {
+          const diffHours = Math.floor(diffMins / 60);
+          setRelativeSyncTime(`${diffHours}h ago`);
+        }
+      }
+    };
+
+    updateRelativeTime();
+    const interval = setInterval(updateRelativeTime, 1000);
+    return () => clearInterval(interval);
+  }, [lastHeartbeat]);
 
   useEffect(() => {
     localStorage.setItem('active_profile', activeProfile);
@@ -195,6 +270,8 @@ export default function App() {
       try {
         const data = JSON.parse(event.data);
         setGameState(data);
+        setLastHeartbeat(new Date());
+        setIsSyncFlashing(true);
         addLog(`TELEMETRY: DATA INGESTED [SECTOR: ${data.sub_district || 'UNKNOWN'}]`);
       } catch (e) {
         console.error('Error parsing SSE data', e);
@@ -232,8 +309,16 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen relative p-4 md:p-8 flex flex-col transition-colors duration-500 ${activeProfile === 'ac' ? 'theme-ac' : 'theme-cb77'}`}>
-      <div className="scanline" />
+    <UiLayersOverlay layers={uiLayers} activeProfile={activeProfile}>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeProfile}
+          initial={{ opacity: 0, filter: 'blur(4px) brightness(1.5)' }}
+          animate={{ opacity: 1, filter: 'blur(0px) brightness(1)' }}
+          exit={{ opacity: 0, filter: 'blur(4px) brightness(0.5)' }}
+          transition={{ duration: 0.4, ease: 'easeInOut' }}
+          className={`min-h-screen relative p-4 md:p-8 flex flex-col transition-colors duration-500 ${activeProfile === 'ac' ? 'theme-ac' : 'theme-cb77'}`}
+        >
 
       {/* Visual Alarm Overlay */}
       <AnimatePresence>
@@ -329,9 +414,19 @@ export default function App() {
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-[10px] font-mono text-gray-500 uppercase">
-            <span>{activeProfile === 'ac' ? 'Animus Link:' : 'ZA-Gateway:'}</span>
-            <span className="text-cp-cyan">Connected</span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 justify-end text-[10px] font-mono text-gray-500 uppercase">
+            <div className="flex items-center gap-1.5">
+              <span>{activeProfile === 'ac' ? 'Animus Link:' : 'ZA-Gateway:'}</span>
+              <span className="text-cp-cyan font-bold">Connected</span>
+            </div>
+            <div className="hidden sm:inline text-gray-700">|</div>
+            <div className="flex items-center gap-1.5">
+              <span>Sync State:</span>
+              <span className={`font-bold transition-all duration-300 ${isSyncFlashing ? 'text-white font-black' : lastHeartbeat ? 'text-cp-yellow' : 'text-cp-red animate-pulse'}`}>
+                {relativeSyncTime}
+              </span>
+              <RefreshCw className={`w-3.5 h-3.5 text-cp-yellow/80 transition-transform duration-500 ${isSyncFlashing ? 'animate-spin text-white' : ''}`} />
+            </div>
           </div>
           <AuthButton />
         </div>
@@ -344,6 +439,12 @@ export default function App() {
           className={`px-4 py-2 font-display font-bold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'dashboard' ? 'text-cp-yellow border-b-2 border-cp-yellow' : 'text-cp-cyan hover:text-white'}`}
         >
           <Activity className="w-5 h-5" /> Telemetry
+        </button>
+        <button 
+          onClick={() => setActiveTab('story')}
+          className={`px-4 py-2 font-display font-bold uppercase tracking-wider flex items-center gap-2 transition-colors whitespace-nowrap ${activeTab === 'story' ? 'text-cp-yellow border-b-2 border-cp-yellow' : 'text-cp-cyan hover:text-white'}`}
+        >
+          <Compass className="w-5 h-5" /> Story Matrix
         </button>
         <button 
           onClick={() => setActiveTab('chat')}
@@ -398,6 +499,10 @@ export default function App() {
         )
       )}
 
+      {activeTab === 'story' && (
+        <HorizonTerminal />
+      )}
+
       {activeTab === 'chat' && (
         user ? <Chatbot activeProfile={activeProfile} /> : <AuthPrompt title={activeProfile === 'ac' ? "Animus Knowledge Link" : "Neural Link"} />
       )}
@@ -414,6 +519,11 @@ export default function App() {
       <footer className="mt-8 text-center text-xs text-gray-500 font-mono">
         <p>To connect the Python Vision Module, point SENSEI_NODE_URL to: <span className="text-cp-cyan">{window.location.origin}/update_state</span></p>
       </footer>
-    </div>
+      
+      {/* Floating Interactive UI Layers HUD Controller */}
+      <UiLayers layers={uiLayers} onChange={setUiLayers} activeProfile={activeProfile} />
+        </motion.div>
+      </AnimatePresence>
+    </UiLayersOverlay>
   );
 }
