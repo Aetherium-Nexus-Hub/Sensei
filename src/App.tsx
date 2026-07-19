@@ -142,6 +142,18 @@ export default function App() {
     }
   };
 
+  // Wire up Custom Event listener for deep-lying triggers (like Command Palette)
+  useEffect(() => {
+    const handleSwitchEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<'cb77' | 'ac'>;
+      if (customEvent.detail) {
+        handleProfileSwitch(customEvent.detail);
+      }
+    };
+    window.addEventListener('switch-profile', handleSwitchEvent);
+    return () => window.removeEventListener('switch-profile', handleSwitchEvent);
+  }, []);
+
   const [alertThreshold, setAlertThreshold] = useState<number>(() => {
     const saved = localStorage.getItem('alert_threshold');
     return saved ? parseInt(saved, 10) : 30;

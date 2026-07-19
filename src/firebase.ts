@@ -8,7 +8,7 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
-}, firebaseConfig.firestoreDatabaseId);
+}, (firebaseConfig as any).firestoreDatabaseId);
 
 export async function testConnection() {
   try {
@@ -21,10 +21,39 @@ export async function testConnection() {
 }
 testConnection();
 
+// Flag to indicate if we are in the middle of a sign-in flow.
+let isSigningIn = false;
+// Cache the access token in memory.
+let cachedAccessToken: string | null = null;
+
+export const getAccessToken = (): string | null => {
+  return cachedAccessToken;
+};
+
+export const setAccessToken = (token: string | null) => {
+  cachedAccessToken = token;
+};
+
+// Clear cached token on signout
+auth.onAuthStateChanged((user) => {
+  if (!user) {
+    cachedAccessToken = null;
+  }
+});
+
 export const signInWithGoogle = async () => {
   const provider = new GoogleAuthProvider();
+  // Request Google Drive Scopes
+  provider.addScope('https://www.googleapis.com/auth/drive');
+  provider.addScope('https://www.googleapis.com/auth/drive.file');
+  
   try {
+    isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken) {
+      cachedAccessToken = credential.accessToken;
+    }
     const user = result.user;
     
     // Check if user exists in db, if not create
@@ -48,9 +77,12 @@ export const signInWithGoogle = async () => {
     }
   } catch (error) {
     console.error("Error signing in with Google", error);
+  } finally {
+    isSigningIn = false;
   }
 };
 
 export const logOut = () => {
+  cachedAccessToken = null;
   signOut(auth);
 };

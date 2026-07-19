@@ -1,10 +1,22 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { Activity, MapPin, Clock, CloudRain, Crosshair, Terminal, Zap, ShieldAlert, Cpu, Network, Users, TrendingUp, Link as LinkIcon, RefreshCw, Eye, BarChart3, Download } from 'lucide-react';
+import { 
+  Activity, MapPin, Clock, CloudRain, Crosshair, Terminal, Zap, ShieldAlert, 
+  Cpu, Network, Users, TrendingUp, Link as LinkIcon, RefreshCw, Eye, 
+  BarChart3, Download, Trash2, FolderOpen, Cloud, Database, Upload
+} from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
+import { db, auth, getAccessToken, signInWithGoogle } from '../firebase';
+import { 
+  listDriveFiles, uploadToDrive, downloadFromDrive, deleteFromDrive, GoogleDriveFile 
+} from '../lib/googleDrive';
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 import TelemetryChart from './TelemetryChart';
+import HeroTelemetry from './HeroTelemetry';
+import ChartHub from './ChartHub';
+import AlertFeed from './AlertFeed';
+import SenseiOracle from './SenseiOracle';
+import CommandPalette from './CommandPalette';
 
 interface GameState {
   district: string;
@@ -76,6 +88,205 @@ export default function Dashboard({
   const [combatEvents, setCombatEvents] = useState<{ id: string; time: string; type: 'DAMAGE' | 'HEAL' | 'ELIM' | 'ULT'; desc: string }[]>([]);
 
   const isAc = activeProfile === 'ac';
+
+  // Oracle & Command Palette UI states
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isOracleOpen, setIsOracleOpen] = useState(false);
+  const [forcedQuery, setForcedQuery] = useState('');
+  const [claimedRewardsTotal, setClaimedRewardsTotal] = useState(12.84);
+
+  // Global key listener for Ctrl/Cmd + K
+  useEffect(() => {
+    const handleGlobalKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKey);
+    return () => window.removeEventListener('keydown', handleGlobalKey);
+  }, []);
+
+  // Google Drive State Configuration
+  const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([]);
+  const [isLoadingDrive, setIsLoadingDrive] = useState(false);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [isUploadingDrive, setIsUploadingDrive] = useState(false);
+  const [driveToken, setDriveToken] = useState<string | null>(null);
+  const [showDrivePanel, setShowDrivePanel] = useState(false);
+
+  // Sync token state on mount or change
+  useEffect(() => {
+    const token = getAccessToken();
+    setDriveToken(token);
+    if (token) {
+      fetchDriveFiles(token);
+    }
+  }, [auth.currentUser]);
+
+  // Fetch file list helper
+  const fetchDriveFiles = async (tokenOverride?: string | null) => {
+    const token = tokenOverride || driveToken || getAccessToken();
+    if (!token) {
+      return;
+    }
+    setIsLoadingDrive(true);
+    setDriveError(null);
+    try {
+      const files = await listDriveFiles(token);
+      setDriveFiles(files);
+    } catch (error: any) {
+      setDriveError(error.message || 'Failed to list Google Drive files');
+    } finally {
+      setIsLoadingDrive(false);
+    }
+  };
+
+  // Re-trigger sign-in to get active scopes
+  const handleConnectDrive = async () => {
+    setDriveError(null);
+    try {
+      await signInWithGoogle();
+      const token = getAccessToken();
+      setDriveToken(token);
+      if (token) {
+        addLog("SYSTEM: Google Drive authorization successful. Synced memory cores.");
+        fetchDriveFiles(token);
+      } else {
+        throw new Error("Could not acquire Google authorization token.");
+      }
+    } catch (e: any) {
+      setDriveError(e.message || 'Authorization failed');
+      addLog(`ERROR: Google Drive authorization failed - ${e.message || 'Unknown issue'}`);
+    }
+  };
+
+  // Upload logs to Google Drive
+  const handleUploadToDrive = async (format: 'json' | 'csv') => {
+    const token = driveToken || getAccessToken();
+    if (!token) {
+      setDriveError('Drive authorization required');
+      return;
+    }
+    if (logs.length === 0) return;
+
+    setIsUploadingDrive(true);
+    setDriveError(null);
+
+    try {
+      const parsedLogs = logs.map((log, index) => {
+        const match = log.match(/^\[(.*?)\] (.*)$/);
+        if (match) {
+          return { id: index, timestamp: match[1], message: match[2] };
+        }
+        return { id: index, timestamp: new Date().toLocaleTimeString(), message: log };
+      });
+
+      let content = '';
+      let mimeType = '';
+      let ext = '';
+
+      if (format === 'json') {
+        content = JSON.stringify(parsedLogs, null, 2);
+        mimeType = 'application/json';
+        ext = 'json';
+      } else {
+        const headers = ['ID', 'Timestamp', 'Message'];
+        const rows = parsedLogs.map(item => {
+          const escapedMsg = item.message.replace(/"/g, '""');
+          return `${item.id},"${item.timestamp}","${escapedMsg}"`;
+        });
+        content = [headers.join(','), ...rows].join('\n');
+        mimeType = 'text/csv';
+        ext = 'csv';
+      }
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const timeStr = new Date().toLocaleTimeString().replace(/:/g, '-');
+      const fileName = `telemetry_logs_${dateStr}_${timeStr}.${ext}`;
+
+      await uploadToDrive(token, fileName, content, mimeType);
+      addLog(`GOOGLE DRIVE: Telemetry backup '${fileName}' uploaded successfully.`);
+      await fetchDriveFiles(token);
+    } catch (error: any) {
+      setDriveError(error.message || 'Failed to upload backup to Google Drive');
+    } finally {
+      setIsUploadingDrive(false);
+    }
+  };
+
+  // Restore logs from Google Drive
+  const handleRestoreFromDrive = async (file: GoogleDriveFile) => {
+    const token = driveToken || getAccessToken();
+    if (!token) {
+      setDriveError('Drive authorization required');
+      return;
+    }
+
+    const confirmed = window.confirm(`Restore telemetry logs from backup file '${file.name}'? This will parse and import the historical logs into your active terminal log.`);
+    if (!confirmed) return;
+
+    setIsLoadingDrive(true);
+    try {
+      const textContent = await downloadFromDrive(token, file.id);
+      addLog(`GOOGLE DRIVE: Successfully retrieved cloud backup '${file.name}'`);
+      
+      if (file.mimeType === 'application/json' || file.name.endsWith('.json')) {
+        try {
+          const parsed = JSON.parse(textContent);
+          if (Array.isArray(parsed)) {
+            addLog(`SYSTEM: Restoring ${parsed.length} log records...`);
+            parsed.forEach((item: any) => {
+              const timeStr = item.timestamp || '';
+              const msgStr = item.message || '';
+              addLog(`RESTORED [${timeStr}]: ${msgStr}`);
+            });
+          } else {
+            addLog(`SYSTEM: Restored - ${textContent.slice(0, 150)}`);
+          }
+        } catch (e) {
+          addLog(`ERROR: Failed to parse JSON file. Raw: ${textContent.slice(0, 150)}`);
+        }
+      } else {
+        // Parse CSV
+        const lines = textContent.split('\n');
+        addLog(`SYSTEM: Restoring ${lines.length - 1} records from CSV backup...`);
+        lines.forEach((line, index) => {
+          if (index === 0) return; // skip header
+          if (!line.trim()) return;
+          addLog(`RESTORED: ${line}`);
+        });
+      }
+    } catch (error: any) {
+      setDriveError(error.message || 'Failed to restore logs');
+    } finally {
+      setIsLoadingDrive(false);
+    }
+  };
+
+  // Delete backup from Google Drive
+  const handleDeleteFromDrive = async (file: GoogleDriveFile) => {
+    const token = driveToken || getAccessToken();
+    if (!token) {
+      setDriveError('Drive authorization required');
+      return;
+    }
+
+    // MANDATORY DESTRUCTIVE CONFIRMATION
+    const confirmed = window.confirm(`Are you sure you want to PERMANENTLY DELETE backup file '${file.name}' from your Google Drive? This action is irreversible.`);
+    if (!confirmed) return;
+
+    setIsLoadingDrive(true);
+    try {
+      await deleteFromDrive(token, file.id);
+      addLog(`GOOGLE DRIVE: Backup file '${file.name}' successfully deleted.`);
+      await fetchDriveFiles(token);
+    } catch (error: any) {
+      setDriveError(error.message || 'Failed to delete backup file');
+    } finally {
+      setIsLoadingDrive(false);
+    }
+  };
 
   const handleDownloadLogs = (format: 'json' | 'csv') => {
     if (logs.length === 0) return;
@@ -309,8 +520,22 @@ export default function Dashboard({
     }
   };
 
+  const triggerOracleExplainer = (query: string) => {
+    setForcedQuery(query);
+    setIsOracleOpen(true);
+  };
+
   return (
     <main className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow overflow-y-auto pb-12 font-mono">
+      {/* Hero Telemetry Grid Banner */}
+      <div className="lg:col-span-12">
+        <HeroTelemetry 
+          gameState={gameState} 
+          activeProfile={activeProfile} 
+          alertThreshold={alertThreshold} 
+        />
+      </div>
+
       {/* --- Column 1: Regional Infrastructure & Roster --- */}
       <div className="lg:col-span-4 flex flex-col gap-6">
         
@@ -458,6 +683,15 @@ export default function Dashboard({
           </div>
         </motion.div>
 
+        {/* Rated Alert & Actions Feed */}
+        <AlertFeed
+          activeProfile={activeProfile}
+          handleManualSync={handleManualSync}
+          syncStatus={syncStatus}
+          addLog={addLog}
+          triggerOracle={triggerOracleExplainer}
+        />
+
         {/* Team Roster */}
         <motion.div 
           initial={{ opacity: 0, x: -20 }}
@@ -565,75 +799,11 @@ export default function Dashboard({
           </div>
         </motion.div>
 
-        {/* Live Visual Telemetry */}
+        {/* Full-width Interactive Chart Hub (APR, Staked Area, Diversity, Heatmap, Consensus Nodes) */}
+        <ChartHub activeProfile={activeProfile} healthHistory={healthHistory} />
+
+        {/* Live Visual Telemetry Grid (Mission Logic & Terminal + Cloud Backup Sync) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Biometrics & Sector */}
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.1 }}
-          >
-            <div className="cp-border p-5 bg-cp-dark/60 h-full flex flex-col">
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-3 text-cp-cyan">
-                  <Activity className="w-5 h-5" />
-                  <h2 className="text-sm font-display font-bold uppercase tracking-[0.2em]">{terms.liveTelemetry}</h2>
-                </div>
-                <div className="text-[8px] text-cp-cyan/40 uppercase">{terms.feedLabel}</div>
-              </div>
-              
-              <div className="space-y-6 flex-grow">
-                <div>
-                  <div className="flex justify-between text-[10px] uppercase mb-2">
-                    <span className="text-gray-500">{terms.stabilityTitle}</span>
-                    <span className={gameState.health_percent < 30 ? "text-cp-red font-bold" : "text-cp-cyan font-bold"}>{gameState.health_percent}%</span>
-                  </div>
-                  <div className="h-4 bg-black border border-cp-cyan/20 relative p-0.5">
-                    <motion.div 
-                      className={`h-full ${gameState.health_percent < 30 ? 'bg-cp-red' : 'bg-cp-cyan'}`}
-                      animate={{ width: `${gameState.health_percent}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="border-t border-white/5 pt-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <BarChart3 className="w-3 h-3 text-cp-cyan" />
-                    <span className="text-[9px] text-gray-500 uppercase tracking-widest">{terms.trendTitle}</span>
-                  </div>
-                  <TelemetryChart data={healthHistory} />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 bg-black/40 border border-white/5">
-                    <div className="text-[9px] text-gray-500 uppercase mb-1">{terms.opDist}</div>
-                    <div className="text-xs font-bold text-white uppercase">{gameState.district}</div>
-                  </div>
-                  <div className="p-3 bg-black/40 border border-white/5">
-                    <div className="text-[9px] text-gray-500 uppercase mb-1">{terms.activeSector}</div>
-                    <div className="text-xs font-bold text-cp-yellow uppercase">{gameState.sub_district || "SYNCING..."}</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-6 pt-2 border-t border-white/5">
-                  <div className="flex items-center gap-3">
-                    <Clock className="w-4 h-4 text-cp-cyan" />
-                    <div>
-                      <div className="text-[8px] text-gray-500 uppercase">SYS-TIME</div>
-                      <div className="text-xs font-bold">{new Date().toLocaleTimeString()}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <CloudRain className="w-4 h-4 text-cp-cyan" />
-                    <div>
-                      <div className="text-[8px] text-gray-500 uppercase">{terms.meteorology}</div>
-                      <div className="text-xs font-bold uppercase">{gameState.weather}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
 
           {/* Mission Logic & Terminal */}
           <motion.div 
@@ -700,6 +870,152 @@ export default function Dashboard({
                   />
                 </div>
               </div>
+
+              {/* GOOGLE DRIVE SYNC CENTER */}
+              <div className="mt-6 pt-6 border-t border-white/5 font-mono">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Cloud className="w-4 h-4 text-cp-yellow animate-pulse" />
+                    <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Google Drive Cloud Storage [GD-SYNC]</span>
+                  </div>
+                  
+                  {driveToken && (
+                    <button 
+                      onClick={() => {
+                        setShowDrivePanel(!showDrivePanel);
+                        if (!showDrivePanel) fetchDriveFiles();
+                      }}
+                      className={`px-2.5 py-0.5 border rounded text-[9px] uppercase tracking-wider transition-all duration-200 cursor-pointer font-bold ${
+                        showDrivePanel 
+                          ? isAc ? 'bg-cp-yellow text-black border-cp-yellow' : 'bg-cp-cyan text-black border-cp-cyan'
+                          : 'bg-transparent text-gray-400 border-white/10 hover:text-white'
+                      }`}
+                    >
+                      {showDrivePanel ? 'Hide Backups' : 'Show Backups'}
+                    </button>
+                  )}
+                </div>
+
+                {!driveToken ? (
+                  <div className="p-4 bg-black/40 border border-dashed border-white/10 rounded flex flex-col items-center justify-center text-center">
+                    <Database className="w-8 h-8 text-gray-500 mb-2" />
+                    <span className="text-[10px] text-gray-400 uppercase mb-3">Google Drive Cloud Synchronization Offline</span>
+                    <button
+                      onClick={handleConnectDrive}
+                      className="cp-button px-4 py-2 text-xs flex items-center gap-2 tracking-widest bg-cp-yellow/10 hover:bg-cp-yellow text-cp-yellow hover:text-black border border-cp-yellow/30 cursor-pointer"
+                    >
+                      <Cloud className="w-3.5 h-3.5" /> AUTHORIZE GOOGLE DRIVE BACKUP
+                    </button>
+                    <span className="text-[8px] text-gray-600 uppercase mt-2">REQUIRES READ/WRITE PERMISSION TO SECURELY SAVE FILE CORES</span>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* User profile identifier & Backup Actions */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-black/50 border border-white/5 rounded">
+                      <div className="flex items-center gap-2">
+                        {auth.currentUser?.photoURL ? (
+                          <img src={auth.currentUser.photoURL} alt="Profile" className="w-6 h-6 rounded-full border border-cp-yellow" referrerPolicy="no-referrer" />
+                        ) : (
+                          <Database className="w-4 h-4 text-cp-yellow" />
+                        )}
+                        <div className="text-left">
+                          <span className="text-[9px] text-gray-500 uppercase block leading-none">AUTHORIZED CORE USER</span>
+                          <span className="text-[10px] font-bold text-white block leading-none mt-1 truncate max-w-[150px]">
+                            {auth.currentUser?.displayName || auth.currentUser?.email || 'Anonymous Operator'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <span className="text-[8px] text-gray-500 uppercase hidden md:inline font-bold">Backup Logs:</span>
+                        <button
+                          onClick={() => handleUploadToDrive('json')}
+                          disabled={isUploadingDrive || logs.length === 0}
+                          className="flex-1 sm:flex-none px-2.5 py-1.5 bg-cp-cyan/10 hover:bg-cp-cyan text-cp-cyan hover:text-black border border-cp-cyan/30 rounded text-[9px] uppercase tracking-wider font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5"
+                          title="Backup Telemetry Logs as JSON to Google Drive"
+                        >
+                          <Upload className="w-3 h-3" /> JSON
+                        </button>
+                        <button
+                          onClick={() => handleUploadToDrive('csv')}
+                          disabled={isUploadingDrive || logs.length === 0}
+                          className="flex-1 sm:flex-none px-2.5 py-1.5 bg-cp-yellow/10 hover:bg-cp-yellow text-cp-yellow hover:text-black border border-cp-yellow/30 rounded text-[9px] uppercase tracking-wider font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5"
+                          title="Backup Telemetry Logs as CSV to Google Drive"
+                        >
+                          <Upload className="w-3 h-3" /> CSV
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expandable Backup Files panel */}
+                    {showDrivePanel && (
+                      <div className="p-3 bg-black/80 border border-white/5 rounded space-y-3">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                          <span className="text-[9px] text-cp-yellow uppercase font-bold tracking-wider flex items-center gap-1">
+                            <FolderOpen className="w-3.5 h-3.5" /> RECENT STORAGE LOG CORES
+                          </span>
+                          <button 
+                            onClick={() => fetchDriveFiles()}
+                            disabled={isLoadingDrive}
+                            className="p-1 hover:bg-white/5 rounded transition-all text-gray-400 hover:text-white cursor-pointer"
+                            title="Refresh File List"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${isLoadingDrive ? 'animate-spin' : ''}`} />
+                          </button>
+                        </div>
+
+                        {driveError && (
+                          <div className="p-2 border border-cp-red/30 bg-cp-red/5 rounded text-[9px] text-cp-red uppercase font-bold">
+                            SYNC_ERROR: {driveError}
+                          </div>
+                        )}
+
+                        {isLoadingDrive && driveFiles.length === 0 ? (
+                          <div className="py-6 text-center text-[9px] text-gray-500 uppercase tracking-widest animate-pulse flex items-center justify-center gap-2">
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-cp-yellow" /> RETRIEVING MEMORY CORES FROM CLOUD...
+                          </div>
+                        ) : driveFiles.length === 0 ? (
+                          <div className="py-6 text-center text-[9px] text-gray-600 uppercase tracking-widest">
+                            NO TELEMETRY BACKUPS FOUND ON GOOGLE DRIVE
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-[160px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1">
+                            {driveFiles.map((file) => (
+                              <div key={file.id} className="flex items-center justify-between p-2 bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 rounded group transition-all">
+                                <div className="text-left overflow-hidden mr-2">
+                                  <span className="text-[10px] font-bold text-gray-300 block truncate group-hover:text-white transition-colors">{file.name}</span>
+                                  <div className="flex items-center gap-2 mt-0.5 text-[8px] text-gray-500 uppercase">
+                                    <span>{file.mimeType.includes('json') ? 'JSON' : 'CSV'}</span>
+                                    <span>•</span>
+                                    <span>{file.modifiedTime ? new Date(file.modifiedTime).toLocaleString() : 'UNKNOWN TIME'}</span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    onClick={() => handleRestoreFromDrive(file)}
+                                    className="px-2 py-1 bg-white/5 hover:bg-cp-cyan hover:text-black rounded text-[8px] uppercase font-bold transition-all cursor-pointer"
+                                    title="Download and Import this Backup into Terminal"
+                                  >
+                                    Restore
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteFromDrive(file)}
+                                    className="p-1 hover:bg-cp-red/20 text-gray-500 hover:text-cp-red rounded transition-all cursor-pointer"
+                                    title="Permanently Delete backup"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </motion.div>
         </div>
@@ -764,6 +1080,38 @@ export default function Dashboard({
           </div>
         </motion.div>
       </div>
+
+      {/* Floating Tactical AI Oracle Widget */}
+      <SenseiOracle 
+        activeProfile={activeProfile} 
+        gameState={gameState} 
+        addLog={addLog}
+        isOpen={isOracleOpen}
+        setIsOpen={setIsOracleOpen}
+        forcedQuery={forcedQuery}
+        clearForcedQuery={() => setForcedQuery('')}
+      />
+
+      {/* Keyboard-Triggered Tactical Command Palette (Ctrl+K) */}
+      <CommandPalette 
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        activeProfile={activeProfile}
+        handleProfileSwitch={(p) => {
+          // Dispatch custom profile event to synchronize other parts of the application
+          window.dispatchEvent(new CustomEvent('switch-profile', { detail: p }));
+        }}
+        handleManualSync={handleManualSync}
+        triggerSimulation={triggerSimulation}
+        clearLogs={() => {
+          addLog("SYSTEM: Local terminal logs purged.");
+        }}
+        claimRewards={() => {
+          setClaimedRewardsTotal(0);
+          addLog("SUCCESS: Transferred yield balances to cold storage ledger.");
+        }}
+        claimed={claimedRewardsTotal}
+      />
     </main>
   );
 }
