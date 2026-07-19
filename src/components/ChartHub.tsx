@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { BarChart3, TrendingUp, HelpCircle, Share2, Grid, Layers, Network, Server } from 'lucide-react';
 import { RatedData } from './HeroTelemetry';
+import { useTimeRange } from '../contexts/TimeRangeContext';
 
 interface ChartHubProps {
   activeProfile?: 'cb77' | 'ac';
@@ -13,13 +14,28 @@ interface ChartHubProps {
   ratedData?: RatedData | null;
 }
 
+/**
+ * ChartHub - Centralized charting component for Sensei telemetry.
+ * Uses global TimeRangeContext for synchronized time-range filtering across all charts.
+ * 
+ * Features:
+ * - APR drift trend line
+ * - Stacked area rewards breakdown (Attestation, Proposals, MEV, Tips)
+ * - Pie chart rewards split with legend
+ * - Client diversity bar chart (Geth, Nethermind, Besu, Erigon)
+ * - Interactive consensus node map with hover inspector
+ * 
+ * @param activeProfile - 'cb77' or 'ac' for theme-aware rendering
+ * @param healthHistory - Array of {time, health} for historical data
+ * @param ratedData - Live Rated Network metrics (validators, APR, effectiveness, stake)
+ */
 export default function ChartHub({ activeProfile = 'cb77', healthHistory, ratedData }: ChartHubProps) {
   const isAc = activeProfile === 'ac';
+  const { timeRange, setTimeRange } = useTimeRange();
   const [activeTab, setActiveTab] = useState<'apr' | 'rewards' | 'breakdown' | 'diversity' | 'nodemap'>('apr');
-  const [timeRange, setTimeRange] = useState<'1d' | '7d' | '30d' | 'all'>('7d');
   const [hoveredNode, setHoveredNode] = useState<any | null>(null);
 
-  // Dynamic colors derived from CB77 or AC
+  // Dynamic colors derived from CB77 or AC profile
   const colors = isAc ? {
     primary: '#4DD0E1', // Teal
     secondary: '#D4AF37', // Gold
@@ -34,19 +50,24 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory, ratedD
     pieColors: ['#00F0FF', '#FCEE0A', '#FF003C', '#8A2BE2']
   };
 
-  // Generate APR data dynamically
+  /**
+   * Generate APR drift data based on time range.
+   * Uses Rated APR as baseline with sinusoidal drift simulation.
+   */
   const getAprData = () => {
     const points = timeRange === '1d' ? 24 : timeRange === '7d' ? 7 : timeRange === '30d' ? 15 : 12;
     return Array.from({ length: points }).map((_, i) => {
       const label = timeRange === '1d' ? `${i}:00` : timeRange === '7d' ? `Day ${i + 1}` : timeRange === '30d' ? `Day ${i * 2 + 1}` : `Month ${i + 1}`;
-      // Simulate slow drift in APR using real Rated APR as baseline
       const baseApr = ratedData?.apr ?? (isAc ? 4.65 : 4.82);
       const apr = baseApr + Math.sin(i * 0.4) * 0.15 + (Math.random() * 0.08);
       return { name: label, apr: parseFloat(apr.toFixed(2)) };
     });
   };
 
-  // Generate stacked rewards data dynamically
+  /**
+   * Generate stacked rewards data (CL + EL components).
+   * Accumulates over time to simulate realistic reward accrual.
+   */
   const getRewardsData = () => {
     const points = timeRange === '1d' ? 24 : timeRange === '7d' ? 7 : timeRange === '30d' ? 15 : 12;
     let accumAttestation = 0;
@@ -56,7 +77,6 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory, ratedD
 
     return Array.from({ length: points }).map((_, i) => {
       const label = timeRange === '1d' ? `${i}:00` : timeRange === '7d' ? `Day ${i + 1}` : timeRange === '30d' ? `Day ${i * 2 + 1}` : `Month ${i + 1}`;
-      
       const step = timeRange === '1d' ? 0.002 : timeRange === '7d' ? 0.04 : timeRange === '30d' ? 0.09 : 0.18;
       
       accumAttestation += step * (0.8 + Math.random() * 0.4);
@@ -74,6 +94,10 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory, ratedD
     });
   };
 
+  /**
+   * Pie chart data for rewards split breakdown.
+   * Varies percentages by time range to simulate realistic variance.
+   */
   const getPieData = () => {
     let base = [55, 20, 18, 7];
     if (timeRange === '1d') base = [52, 22, 17, 9];
@@ -88,6 +112,10 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory, ratedD
     ];
   };
 
+  /**
+   * Client diversity data for execution layer analysis.
+   * Shows market share of Ethereum execution clients.
+   */
   const getDiversityData = () => {
     let base = [45, 30, 15, 10];
     if (timeRange === '1d') base = [48, 28, 14, 10];
@@ -102,7 +130,10 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory, ratedD
     ];
   };
 
-  // Consensus Node Map positions
+  /**
+   * Validator nodes for Consensus Node Map visualization.
+   * Includes position, status, and performance metrics.
+   */
   const validatorNodes = [
     { id: 1, x: 25, y: 35, status: 'active', name: 'SENSEI-01', stake: '32.12 ETH', client: 'Lighthouse/Besu', effectiveness: '99.8%' },
     { id: 2, x: 45, y: 20, status: 'active', name: 'SENSEI-02', stake: '32.08 ETH', client: 'Prysm/Geth', effectiveness: '99.1%' },
@@ -142,13 +173,15 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory, ratedD
           </h2>
         </div>
 
-        {/* Global Time Range Selector - Shared across all except map */}
+        {/* Global Time Range Selector - Now using global context */}
         {activeTab !== 'nodemap' && (
-          <div className="flex items-center gap-1 bg-black/60 p-0.5 border border-white/5 rounded">
+          <div className="flex items-center gap-1 bg-black/60 p-0.5 border border-white/5 rounded flex-wrap sm:flex-nowrap">
             {(['1d', '7d', '30d', 'all'] as const).map((range) => (
-              <button
+              <motion.button
                 key={range}
                 onClick={() => setTimeRange(range)}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 className={`px-2 py-0.5 text-[9px] font-bold uppercase transition-all cursor-pointer ${
                   timeRange === range 
                     ? (isAc ? 'bg-cp-yellow text-black font-black' : 'bg-cp-cyan text-black font-black') 
@@ -156,7 +189,7 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory, ratedD
                 }`}
               >
                 {range}
-              </button>
+              </motion.button>
             ))}
           </div>
         )}
@@ -196,189 +229,231 @@ export default function ChartHub({ activeProfile = 'cb77', healthHistory, ratedD
         </button>
       </div>
 
-      {/* Chart Views */}
-      <div className="flex-grow min-h-[220px]">
-        {activeTab === 'apr' && (
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={getAprData()}>
-              <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
-              <XAxis dataKey="name" fontSize={9} stroke="#888" />
-              <YAxis domain={[4.2, 5.5]} stroke={colors.primary} fontSize={9} tickFormatter={(v) => `${v}%`} />
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#000', border: `1px solid ${colors.primary}`, fontSize: '9px' }}
-                itemStyle={{ color: colors.primary }}
-              />
-              <Line type="monotone" dataKey="apr" stroke={colors.primary} strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} isAnimationActive={true} />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-
-        {activeTab === 'rewards' && (
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={getRewardsData()}>
-              <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
-              <XAxis dataKey="name" fontSize={9} stroke="#888" />
-              <YAxis stroke={colors.primary} fontSize={9} tickFormatter={(v) => `${v.toFixed(2)}Ξ`} />
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#000', border: `1px solid ${colors.primary}`, fontSize: '9px' }}
-              />
-              <Legend wrapperStyle={{ fontSize: '8px' }} />
-              <Area type="monotone" dataKey="Attestation (CL)" stackId="1" stroke={colors.pieColors[0]} fill={colors.pieColors[0]} fillOpacity={0.4} />
-              <Area type="monotone" dataKey="Proposals (CL)" stackId="1" stroke={colors.pieColors[1]} fill={colors.pieColors[1]} fillOpacity={0.4} />
-              <Area type="monotone" dataKey="MEV Boost (EL)" stackId="1" stroke={colors.pieColors[2]} fill={colors.pieColors[2]} fillOpacity={0.4} />
-              <Area type="monotone" dataKey="Execution Tips (EL)" stackId="1" stroke={colors.pieColors[3]} fill={colors.pieColors[3]} fillOpacity={0.4} />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
-
-        {activeTab === 'breakdown' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={getPieData()}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {getPieData().map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={colors.pieColors[index % colors.pieColors.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#000', border: `1px solid ${colors.primary}`, fontSize: '9px' }} />
-                </PieChart>
+      {/* Chart Views with smooth transitions */}
+      <div className="flex-grow min-h-[220px] relative">
+        <AnimatePresence mode="wait">
+          {activeTab === 'apr' && (
+            <motion.div
+              key="apr"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={getAprData()}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
+                  <XAxis dataKey="name" fontSize={9} stroke="#888" />
+                  <YAxis domain={[4.2, 5.5]} stroke={colors.primary} fontSize={9} tickFormatter={(v) => `${v}%`} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#000', border: `1px solid ${colors.primary}`, fontSize: '9px' }}
+                    itemStyle={{ color: colors.primary }}
+                  />
+                  <Line type="monotone" dataKey="apr" stroke={colors.primary} strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} isAnimationActive={true} />
+                </LineChart>
               </ResponsiveContainer>
-            </div>
-            <div className="space-y-2">
-              {getPieData().map((item, index) => (
-                <div key={item.name} className="flex items-center justify-between text-xs p-1.5 bg-black/30 border border-white/5 rounded">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.pieColors[index] }} />
-                    <span className="text-gray-300 font-bold">{item.name}</span>
-                  </div>
-                  <span className="text-white font-mono">{item.value}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
 
-        {activeTab === 'diversity' && (
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={getDiversityData()} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
-              <XAxis type="number" fontSize={9} stroke="#888" tickFormatter={(v) => `${v}%`} />
-              <YAxis dataKey="name" type="category" stroke={colors.primary} fontSize={9} />
-              <Tooltip contentStyle={{ backgroundColor: '#000', border: `1px solid ${colors.primary}`, fontSize: '9px' }} />
-              <Bar dataKey="share" radius={[0, 4, 4, 0]}>
-                {getDiversityData().map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={index === 0 ? colors.accent : colors.primary} />
+          {activeTab === 'rewards' && (
+            <motion.div
+              key="rewards"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={getRewardsData()}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
+                  <XAxis dataKey="name" fontSize={9} stroke="#888" />
+                  <YAxis stroke={colors.primary} fontSize={9} tickFormatter={(v) => `${v.toFixed(2)}Ξ`} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#000', border: `1px solid ${colors.primary}`, fontSize: '9px' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '8px' }} />
+                  <Area type="monotone" dataKey="Attestation (CL)" stackId="1" stroke={colors.pieColors[0]} fill={colors.pieColors[0]} fillOpacity={0.4} />
+                  <Area type="monotone" dataKey="Proposals (CL)" stackId="1" stroke={colors.pieColors[1]} fill={colors.pieColors[1]} fillOpacity={0.4} />
+                  <Area type="monotone" dataKey="MEV Boost (EL)" stackId="1" stroke={colors.pieColors[2]} fill={colors.pieColors[2]} fillOpacity={0.4} />
+                  <Area type="monotone" dataKey="Execution Tips (EL)" stackId="1" stroke={colors.pieColors[3]} fill={colors.pieColors[3]} fillOpacity={0.4} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </motion.div>
+          )}
+
+          {activeTab === 'breakdown' && (
+            <motion.div
+              key="breakdown"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center"
+            >
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={getPieData()}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {getPieData().map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={colors.pieColors[index % colors.pieColors.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: '#000', border: `1px solid ${colors.primary}`, fontSize: '9px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-2">
+                {getPieData().map((item, index) => (
+                  <div key={item.name} className="flex items-center justify-between text-xs p-1.5 bg-black/30 border border-white/5 rounded">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.pieColors[index] }} />
+                      <span className="text-gray-300 font-bold">{item.name}</span>
+                    </div>
+                    <span className="text-white font-mono">{item.value}%</span>
+                  </div>
                 ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-
-        {activeTab === 'nodemap' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 relative">
-            {/* Interactive Validator Map canvas visual representation */}
-            <div className="col-span-2 relative h-[220px] bg-black/40 border border-white/5 rounded overflow-hidden select-none">
-              <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ 
-                backgroundImage: 'radial-gradient(circle, var(--color-cp-cyan) 1px, transparent 1px)',
-                backgroundSize: '16px 16px'
-              }} />
-              
-              {/* Central overwatch link line connectors */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                {validatorNodes.map((n, idx) => {
-                  if (idx === 0) return null;
-                  const prev = validatorNodes[idx - 1];
-                  return (
-                    <line 
-                      key={idx}
-                      x1={`${prev.x}%`} 
-                      y1={`${prev.y}%`} 
-                      x2={`${n.x}%`} 
-                      y2={`${n.y}%`} 
-                      stroke={n.status === 'slashing' ? colors.accent : colors.primary} 
-                      strokeWidth={0.5} 
-                      strokeOpacity={0.15} 
-                    />
-                  );
-                })}
-              </svg>
-
-              {/* Node triggers */}
-              {validatorNodes.map((node) => (
-                <button
-                  key={node.id}
-                  onMouseEnter={() => setHoveredNode(node)}
-                  onMouseLeave={() => setHoveredNode(null)}
-                  style={{ left: `${node.x}%`, top: `${node.y}%` }}
-                  className={`absolute -translate-x-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center cursor-crosshair rounded-full border transition-all ${
-                    node.status === 'slashing' 
-                      ? 'bg-cp-red/20 border-cp-red shadow-[0_0_8px_rgba(255,0,0,0.6)] animate-ping' 
-                      : node.status === 'inactive' 
-                      ? 'bg-gray-800 border-gray-600'
-                      : isAc
-                      ? 'bg-cp-yellow/20 border-cp-yellow hover:scale-125 hover:bg-cp-yellow/40 shadow-[0_0_6px_rgba(212,175,55,0.4)]'
-                      : 'bg-cp-cyan/20 border-cp-cyan hover:scale-125 hover:bg-cp-cyan/40 shadow-[0_0_6px_rgba(0,240,255,0.4)]'
-                  }`}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${
-                    node.status === 'slashing' ? 'bg-cp-red' : node.status === 'inactive' ? 'bg-gray-500' : isAc ? 'bg-cp-yellow' : 'bg-cp-cyan'
-                  }`} />
-                </button>
-              ))}
-            </div>
-
-            {/* Live Hover Info HUD Card */}
-            <div className="col-span-1 border border-white/5 bg-black/60 p-3 flex flex-col justify-between h-[220px] rounded text-[10px]">
-              <div>
-                <span className="block text-[8px] text-gray-500 uppercase tracking-widest font-bold mb-1 border-b border-white/5 pb-1">
-                  Node Inspector
-                </span>
-                {hoveredNode || validatorNodes[0] ? (
-                  <div className="space-y-1.5 font-mono">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">ID:</span>
-                      <span className="text-white font-bold">{(hoveredNode || validatorNodes[0]).name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400 font-bold">STAKE:</span>
-                      <span className="text-cp-yellow font-bold">{(hoveredNode || validatorNodes[0]).stake}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">CLIENT:</span>
-                      <span className={isAc ? 'text-cp-yellow' : 'text-cp-cyan'}>{(hoveredNode || validatorNodes[0]).client}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">EFFECTIV:</span>
-                      <span className={(hoveredNode || validatorNodes[0]).status === 'slashing' ? 'text-cp-red font-bold' : 'text-green-400'}>
-                        {(hoveredNode || validatorNodes[0]).effectiveness}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">STATUS:</span>
-                      <span className={`font-black uppercase ${(hoveredNode || validatorNodes[0]).status === 'slashing' ? 'text-cp-red animate-pulse' : (hoveredNode || validatorNodes[0]).status === 'inactive' ? 'text-gray-500' : isAc ? 'text-cp-yellow' : 'text-cp-cyan'}`}>
-                        {(hoveredNode || validatorNodes[0]).status}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <span className="text-gray-600 block text-center py-8">HOVER VALIDATOR IN NETWORK CONSOLE</span>
-                )}
               </div>
-              <div className="text-[8px] text-gray-500 border-t border-white/5 pt-1 mt-1 leading-normal uppercase">
-                {isAc ? "Hover over genetic synapse memory relays to isolate sync parameters." : "Hover over secure validators to query specific consensus telemetry."}
+            </motion.div>
+          )}
+
+          {activeTab === 'diversity' && (
+            <motion.div
+              key="diversity"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={getDiversityData()} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke={colors.grid} />
+                  <XAxis type="number" fontSize={9} stroke="#888" tickFormatter={(v) => `${v}%`} />
+                  <YAxis dataKey="name" type="category" stroke={colors.primary} fontSize={9} />
+                  <Tooltip contentStyle={{ backgroundColor: '#000', border: `1px solid ${colors.primary}`, fontSize: '9px' }} />
+                  <Bar dataKey="share" radius={[0, 4, 4, 0]}>
+                    {getDiversityData().map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={index === 0 ? colors.accent : colors.primary} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </motion.div>
+          )}
+
+          {activeTab === 'nodemap' && (
+            <motion.div
+              key="nodemap"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="grid grid-cols-1 md:grid-cols-3 gap-4 relative"
+            >
+              {/* Interactive Validator Map */}
+              <div className="col-span-2 relative h-[220px] bg-black/40 border border-white/5 rounded overflow-hidden select-none">
+                <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ 
+                  backgroundImage: 'radial-gradient(circle, var(--color-cp-cyan) 1px, transparent 1px)',
+                  backgroundSize: '16px 16px'
+                }} />
+                
+                {/* Central overwatch link line connectors */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                  {validatorNodes.map((n, idx) => {
+                    if (idx === 0) return null;
+                    const prev = validatorNodes[idx - 1];
+                    return (
+                      <line 
+                        key={idx}
+                        x1={`${prev.x}%`} 
+                        y1={`${prev.y}%`} 
+                        x2={`${n.x}%`} 
+                        y2={`${n.y}%`} 
+                        stroke={n.status === 'slashing' ? colors.accent : colors.primary} 
+                        strokeWidth={0.5} 
+                        strokeOpacity={0.15} 
+                      />
+                    );
+                  })}
+                </svg>
+
+                {/* Node triggers */}
+                {validatorNodes.map((node) => (
+                  <button
+                    key={node.id}
+                    onMouseEnter={() => setHoveredNode(node)}
+                    onMouseLeave={() => setHoveredNode(null)}
+                    style={{ left: `${node.x}%`, top: `${node.y}%` }}
+                    className={`absolute -translate-x-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center cursor-crosshair rounded-full border transition-all ${
+                      node.status === 'slashing' 
+                        ? 'bg-cp-red/20 border-cp-red shadow-[0_0_8px_rgba(255,0,0,0.6)] animate-ping' 
+                        : node.status === 'inactive' 
+                        ? 'bg-gray-800 border-gray-600'
+                        : isAc
+                        ? 'bg-cp-yellow/20 border-cp-yellow hover:scale-125 hover:bg-cp-yellow/40 shadow-[0_0_6px_rgba(212,175,55,0.4)]'
+                        : 'bg-cp-cyan/20 border-cp-cyan hover:scale-125 hover:bg-cp-cyan/40 shadow-[0_0_6px_rgba(0,240,255,0.4)]'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      node.status === 'slashing' ? 'bg-cp-red' : node.status === 'inactive' ? 'bg-gray-500' : isAc ? 'bg-cp-yellow' : 'bg-cp-cyan'
+                    }`} />
+                  </button>
+                ))}
               </div>
-            </div>
-          </div>
-        )}
+
+              {/* Live Hover Info HUD Card */}
+              <div className="col-span-1 border border-white/5 bg-black/60 p-3 flex flex-col justify-between h-[220px] rounded text-[10px]">
+                <div>
+                  <span className="block text-[8px] text-gray-500 uppercase tracking-widest font-bold mb-1 border-b border-white/5 pb-1">
+                    Node Inspector
+                  </span>
+                  {hoveredNode || validatorNodes[0] ? (
+                    <div className="space-y-1.5 font-mono">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">ID:</span>
+                        <span className="text-white font-bold">{(hoveredNode || validatorNodes[0]).name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400 font-bold">STAKE:</span>
+                        <span className="text-cp-yellow font-bold">{(hoveredNode || validatorNodes[0]).stake}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">CLIENT:</span>
+                        <span className={isAc ? 'text-cp-yellow' : 'text-cp-cyan'}>{(hoveredNode || validatorNodes[0]).client}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">EFFECTIV:</span>
+                        <span className={(hoveredNode || validatorNodes[0]).status === 'slashing' ? 'text-cp-red font-bold' : 'text-green-400'}>
+                          {(hoveredNode || validatorNodes[0]).effectiveness}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">STATUS:</span>
+                        <span className={`font-black uppercase ${
+                          (hoveredNode || validatorNodes[0]).status === 'slashing' ? 'text-cp-red animate-pulse' : 'text-green-400'
+                        }`}>
+                          {(hoveredNode || validatorNodes[0]).status}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-gray-600 block text-center py-8">HOVER VALIDATOR IN NETWORK CONSOLE</span>
+                  )}
+                </div>
+                <div className="text-[8px] text-gray-500 border-t border-white/5 pt-1 mt-1 leading-normal uppercase">
+                  {isAc ? "Hover over genetic synapse memory relays to isolate sync parameters." : "Hover over secure validators to query specific consensus telemetry."}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
