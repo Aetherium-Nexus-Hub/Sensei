@@ -1,20 +1,40 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Sensei Node Dashboard
 
-# Run and deploy your AI Studio app
+**Description:** A real-time dashboard for the Sensei AI Vision Module (Cyberpunk 2077) with integrated configurable emergency alert systems.
 
-This contains everything you need to run your app locally.
+## Overview
 
-View your app in AI Studio: https://ai.studio/apps/055a295a-820e-40fe-8bac-9507263c541f
+Sensei is an advanced real-time monitoring and control dashboard designed around a high-immersion Cyberpunk 2077 aesthetic. It integrates the Sensei AI Vision Module to provide intelligent visual telemetry, anomaly detection, and a fully configurable emergency alert system for critical operational environments.
 
-## Run Locally
+## Features
 
-**Prerequisites:**  Node.js
+*   **AI Vision Telemetry:** Real-time visual analysis and monitoring powered by advanced AI models.
+*   **Cyberpunk Interface:** Immersive, high-contrast user interface engineered for rapid situational awareness.
+*   **Configurable Emergency Alerts:** Dynamic alert systems that respond immediately to threshold breaches or systemic anomalies.
+*   **Modular Architecture:** Easily extensible widget system for custom telemetry feeds.
 
+## Getting Started
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### Prerequisites
+
+*   Node.js
+
+### Local Development
+
+1.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+2.  **Configure API Key:** Set your `GEMINI_API_KEY` in the `.env.local` file.
+3.  **Run the application:**
+    ```bash
+    npm run dev
+    ```
+
+## Contribution
+
+We welcome contributions to enhance the vision modules and dashboard capabilities. Please follow the standard contribution workflow.
+
+## License
+
+[License Information]
